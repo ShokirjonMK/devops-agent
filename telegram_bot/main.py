@@ -1,5 +1,5 @@
 """
-Telegram bot (aiogram 3): tabiiy til buyruqlarini API orqali navbatga qo‘yadi va holatni kuzatadi.
+Telegram bot (aiogram 3): API orqali vazifa + bosqichma-bosqich progress (timeline poll).
 """
 
 from __future__ import annotations
@@ -22,8 +22,9 @@ log = logging.getLogger("telegram_bot")
 API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000").rstrip("/")
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "3"))
-POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL_SEC", "3"))
-POLL_MAX = int(os.environ.get("POLL_MAX_ROUNDS", "120"))
+POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL_SEC", "2"))
+POLL_MAX = int(os.environ.get("POLL_MAX_ROUNDS", "180"))
+TG_MSG_MAX = 3900
 
 
 async def _request_with_retries(
@@ -74,6 +75,43 @@ async def poll_task(task_id: int) -> dict:
     return r.json()
 
 
+def _format_step_line(step: dict) -> str:
+    cmd = (step.get("command") or "").strip()
+    ph = (step.get("phase") or "").strip()
+    ex = (step.get("explanation") or "").strip()
+    st = (step.get("status") or "").strip()
+    parts = []
+    if ph:
+        parts.append(f"[{ph}]")
+    if cmd:
+        parts.append(cmd[:200])
+    if ex:
+        parts.append(f"→ {ex[:280]}")
+    if st:
+        parts.append(f"({st})")
+    return " ".join(parts) if parts else str(step.get("id", ""))
+
+
+def _build_progress_text(tid: int, detail: dict, last_n: int = 4) -> str:
+    st = str(detail.get("status", ""))
+    steps = detail.get("steps") or []
+    if not isinstance(steps, list):
+        steps = []
+    tail = steps[-last_n:] if len(steps) > last_n else steps
+    lines = [
+        f"Vazifa #{tid} — {st}",
+        f"Jami qadamlar: {len(steps)}",
+        "",
+    ]
+    for s in tail:
+        if isinstance(s, dict):
+            lines.append(_format_step_line(s))
+    body = "\n".join(lines)
+    if len(body) > TG_MSG_MAX:
+        body = body[: TG_MSG_MAX - 20] + "\n…(qisqartirildi)"
+    return body
+
+
 router = Router()
 
 
@@ -82,7 +120,8 @@ async def cmd_start(message: Message) -> None:
     await message.answer(
         "Salom! Tabiiy til buyrug‘ini yuboring.\n"
         "Masalan: sarbon serverida nginx ishlamayapti\n\n"
-        "Avval Web UI da serverlar ro‘yxatiga alias qo‘shilgan bo‘lishi kerak.",
+        "Avval Web UI da serverlar ro‘yxatiga alias qo‘shilgan bo‘lishi kerak.\n"
+        "Progress: har yangi qadamda xabar yangilanadi.",
     )
 
 
@@ -95,36 +134,46 @@ async def on_text(message: Message) -> None:
         return
     chat_id = str(message.chat.id)
     status_msg = await message.answer("Qabul qilindi. Agent ishga tushmoqda…")
+    last_step_count = -1
     try:
         task = await submit_task(text, chat_id)
         tid = int(task["id"])
-        await status_msg.edit_text(f"Vazifa #{tid} navbatda…")
+        await status_msg.edit_text(
+            f"Vazifa #{tid} navbatda…\nServer aniqlanishi va SSH diagnostikasi boshlanadi."
+        )
         for _ in range(POLL_MAX):
             await asyncio.sleep(POLL_INTERVAL)
             detail = await poll_task(tid)
-            st = str(detail["status"])
-            if st in ("done", "error"):
-                summary = detail.get("summary") or st
-                body = "\n".join(
-                    [
-                        f"Vazifa #{tid}: {st}",
-                        "",
-                        f"Buyruq: {str(detail.get('command_text', ''))[:500]}",
-                        "",
-                        str(summary)[:3500],
-                    ]
-                )
+            steps = detail.get("steps") or []
+            n = len(steps) if isinstance(steps, list) else 0
+            st = str(detail.get("status", ""))
+
+            if n > last_step_count or st in ("done", "error"):
+                last_step_count = n
+                if st in ("done", "error"):
+                    summary = detail.get("summary") or st
+                    body = "\n".join(
+                        [
+                            f"Vazifa #{tid}: {st}",
+                            "",
+                            f"Buyruq: {str(detail.get('command_text', ''))[:400]}",
+                            "",
+                            str(summary)[:3200],
+                        ]
+                    )
+                    if len(body) > TG_MSG_MAX:
+                        body = body[: TG_MSG_MAX - 15] + "\n…"
+                    try:
+                        await status_msg.edit_text(body)
+                    except Exception:
+                        await message.answer(body[:4096])
+                    return
+                prog = _build_progress_text(tid, detail)
                 try:
-                    await status_msg.edit_text(body)
+                    await status_msg.edit_text(prog)
                 except Exception as edit_err:
                     log.debug("edit_text: %s", edit_err)
-                    await message.answer(body[:4096])
-                return
-            try:
-                await status_msg.edit_text(f"Vazifa #{tid} holati: {st}…")
-            except Exception:
-                pass
-        await status_msg.edit_text(f"Vazifa #{tid} hali tugamagan. Web UI dan kuzating.")
+        await status_msg.edit_text(f"Vazifa #{tid} vaqti tugadi. Web UI dan kuzating.")
     except Exception as e:
         log.exception("task failed")
         try:

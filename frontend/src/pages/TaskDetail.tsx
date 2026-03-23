@@ -68,6 +68,17 @@ export default function TaskDetail() {
                   {s.command}
                 </pre>
               )}
+              {s.phase && (
+                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-sky-400/90">
+                  bosqich: {s.phase}
+                </p>
+              )}
+              {s.explanation && (
+                <p className="mt-1 rounded-md border border-slate-700/80 bg-slate-900/80 px-2 py-1.5 text-xs text-slate-300">
+                  <span className="text-slate-500">Nima uchun: </span>
+                  {s.explanation}
+                </p>
+              )}
               <p className="mt-1 text-xs text-slate-400">status: {s.status}</p>
               {s.output && (
                 <pre className="mt-2 max-h-64 overflow-auto rounded-lg border border-slate-800 bg-black/40 p-3 font-mono text-xs text-slate-300">

@@ -116,4 +116,4 @@ docker compose build --no-cache
 docker compose up -d
 ```
 
-Ma’lumotlar bazasi migratsiyasi API/worker `docker-entrypoint.sh` orqali `alembic upgrade head` bilan avtomatik bajariladi.
+Ma’lumotlar bazasi migratsiyasi API/worker `docker-entrypoint.sh` orqali `alembic upgrade head` bilan avtomatik bajariladi (jumladan `002_task_step_meta`: `explanation`, `phase` ustunlari).

@@ -1,45 +1,81 @@
 # DevOps AI Agent
 
-`tz.md` / `tz1.md` bo‘yicha **AI DevOps operator** platformasi: tabiiy til → serverni aniqlash → SSH diagnostika → LLM qaror → filtrlangan bajarish → **timeline** va **audit**.
+Production-style **avtonom DevOps / SysAdmin / NetAdmin AI operator**: tabiiy til → server (alias) → **diagnose → decide → execute → verify** sikli (LLM) → SSH → **timeline** (har qadamda *nima uchun*) + audit.
+
+## Loyiha tahlili (qisqa)
+
+| Bo‘lim | Mazmun |
+|--------|--------|
+| **Arxitektura** | Web/Telegram → FastAPI → PostgreSQL + Celery (Redis) → worker → Paramiko → maqsadli server |
+| **Agent** | Intent JSON (`diagnostic_plan` + `problem_summary`) → diagnostika qadamlari → sikl: `analysis` + `next_steps[{command, explanation}]` + `step_phase` (execute/verify) |
+| **Timeline** | `task_steps`: `step_order`, `command`, `output`, `status`, `timestamp`, **`explanation`**, **`phase`** |
+| **Xavfsizlik** | Buyruq qora ro‘yxati, SSH timeout/retry, buyruq uzunligi cheklovi, audit `logs` |
+
+## Aniqlangan muammolar va yechimlar (joriy versiya)
+
+| Muammo | Yechim |
+|--------|--------|
+| Qadam sababi ko‘rinmas edi | `task_steps.explanation` + `phase`; LLM har buyruq uchun WHY |
+| Verify alohida ifodalanmagan | `step_phase: verify` + promptda verify bosqichi |
+| Server nomi noaniq | Alias normalizatsiya; **bitta server** bo‘lsa avtomatik fallback + audit |
+| Cheksiz sikl xavfi | `agent_max_iterations` + **takrorlanuvchi reja** 2 marta — to‘xtatish |
+| Telegram “bir martalik” natija | Poll `2s`, yangi `steps` soni o‘zgarganda progress matni yangilanadi |
+| Kiritma abuse | `command_text` max **8000** belgi (Pydantic) |
+
+## Qo‘shilgan / kuchaytirilgan komponentlar
+
+- Alembic **`002_task_step_meta`**: `explanation`, `phase`
+- Agent: diagnostika rejalashtirish, `_decide_loop`, chiqishdan **hint** audit (`permission denied`, disk, port)
+- Telegram: bosqichma-bosqich progress matni
+- Frontend: timeline da phase + explanation
 
 ## Hujjatlar
 
 | Fayl | Mazmun |
 |------|--------|
-| [INSTALL.md](INSTALL.md) | Docker va mahalliy o‘rnatish, ishga tushirish |
-| [USAGE.md](USAGE.md) | Real buyruqlar, nginx/docker/port/disk/SSH ssenariylari |
-| [API.md](API.md) | REST endpointlar va JSON shakllar |
+| [INSTALL.md](INSTALL.md) | Docker va mahalliy o‘rnatish |
+| [USAGE.md](USAGE.md) | Misollar va test ssenariylari |
+| [API.md](API.md) | REST |
+
+## Arxitektura (diagram)
+
+```text
+[React UI] ──► nginx /api ──► [FastAPI] ──► PostgreSQL
+                                │ delay
+                                ▼
+                         [Redis] ◄──► [Celery worker]
+                                │
+                         DevOpsAgent (LLM + loop)
+                                │
+                                ▼
+                         [Paramiko SSH] ──► Linux serverlar
+
+[Telegram aiogram] ──HTTP──► FastAPI (/api/tasks/submit, GET task)
+```
 
 ## Stack
 
-- **Backend:** FastAPI, PostgreSQL, **Redis + Celery**, Paramiko (SSH)
-- **AI:** OpenAI / `OPENAI_BASE_URL` (mos API) yoki Anthropic
-- **Frontend:** React + Vite + Tailwind
-- **Telegram:** **aiogram 3** (`telegram_bot/`)
+- **Backend:** FastAPI, PostgreSQL, Redis + Celery, Paramiko  
+- **AI:** OpenAI yoki `OPENAI_BASE_URL`; yoki Anthropic (`AI_PROVIDER`)  
+- **Frontend:** React + Vite + Tailwind  
+- **Telegram:** aiogram 3  
 
-## Tez start (Docker)
+## Tez start
 
 ```bash
 cp .env.example .env
-# OPENAI_API_KEY yoki mahalliy LLM URL; SSH kalit — ssh-keys/ yoki SSH_PRIVATE_KEY_B64
 docker compose up -d --build
 ```
 
-- **UI:** http://localhost  
-- **Swagger:** http://localhost:8000/docs  
+- UI: http://localhost  
+- Swagger: http://localhost:8000/docs  
 
-**Telegram:**
-
-```bash
-docker compose --profile telegram up -d --build
-```
+Telegram: `docker compose --profile telegram up -d --build`
 
 ## Xavfsizlik
 
-- Xavfli buyruqlar filtri (`backend/app/services/command_filter.py`)
-- SSH ulanish **qayta urinish** + loglar (`ssh_client.py`)
-- API validatsiya xatolari — JSON `detail` (422)
+- `backend/app/services/command_filter.py`  
+- SSH: timeout, **retry/backoff** (`ssh_client.py`, env orqali)  
+- API: 422 validatsiya JSON  
 
-## Production eslatma
-
-SSH `AutoAddPolicy` qulay, lekin productionda host kalitini qat’iy tekshirish yaxshiroq. LLM chiqishi har doim to‘g‘ri bo‘lmasligi mumkin — muhim muhitda inson tasdiqlash qatlami qo‘shing.
+Production: `known_hosts` / SSH siyosati, API auth, rate limit — keyingi iteratsiya.

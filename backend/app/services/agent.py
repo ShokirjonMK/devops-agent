@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -10,6 +11,11 @@ from app.models import AuditLog, Server, Task, TaskStatus, TaskStep, StepStatus
 from app.services.command_filter import is_command_allowed
 from app.services.llm import complete_json
 from app.services.ssh_client import SSHExecutor
+
+# Agent loop: diagnose → (decide → execute → [implicit verify via next iteration]) → repeat
+PHASE_DIAGNOSE = "diagnose"
+PHASE_EXECUTE = "execute"
+PHASE_VERIFY = "verify"
 
 
 class DevOpsAgent:
@@ -33,11 +39,11 @@ class DevOpsAgent:
         self._order += 1
         return self._order
 
-    def _add_step(
+    def _add_step_running(
         self,
         command: str | None,
-        output: str | None,
-        status: str,
+        explanation: str | None,
+        phase: str | None,
     ) -> None:
         t = self._task()
         if not t:
@@ -47,8 +53,45 @@ class DevOpsAgent:
                 task_id=t.id,
                 step_order=self._next_step_order(),
                 command=command,
-                output=(output or "")[:65000],
-                status=status,
+                output=None,
+                status=StepStatus.running.value,
+                explanation=(explanation or "")[:8000] or None,
+                phase=phase,
+            )
+        )
+        self.db.commit()
+
+    def _finalize_last_step(self, task_id: int, output: str, status: str) -> None:
+        step = (
+            self.db.query(TaskStep)
+            .filter(TaskStep.task_id == task_id)
+            .order_by(TaskStep.step_order.desc())
+            .first()
+        )
+        if step:
+            step.output = (output or "")[:65000]
+            step.status = status
+            self.db.commit()
+
+    def _add_step_skipped(
+        self,
+        command: str | None,
+        reason: str,
+        explanation: str | None,
+        phase: str | None,
+    ) -> None:
+        t = self._task()
+        if not t:
+            return
+        self.db.add(
+            TaskStep(
+                task_id=t.id,
+                step_order=self._next_step_order(),
+                command=command,
+                output=reason[:65000],
+                status=StepStatus.skipped.value,
+                explanation=(explanation or reason)[:8000],
+                phase=phase,
             )
         )
         self.db.commit()
@@ -63,6 +106,7 @@ class DevOpsAgent:
         if not name_hint:
             return None
         hint = name_hint.strip().lower()
+        hint = re.sub(r"\s+server(id|da|ida)?$", "", hint).strip()
         for s in servers:
             if s.name.lower() == hint:
                 return s
@@ -70,6 +114,143 @@ class DevOpsAgent:
             if hint in s.name.lower() or s.name.lower() in hint:
                 return s
         return None
+
+    @staticmethod
+    def _normalize_diagnostic_plan(intent: dict[str, Any]) -> list[dict[str, str]]:
+        plan = intent.get("diagnostic_plan")
+        out: list[dict[str, str]] = []
+        if isinstance(plan, list):
+            for item in plan:
+                if isinstance(item, dict):
+                    c = str(item.get("command", "")).strip()
+                    e = str(item.get("explanation", "")).strip()
+                    if c:
+                        out.append(
+                            {
+                                "command": c,
+                                "explanation": e or "Diagnostika: tizim va servislar holatini tekshirish.",
+                            }
+                        )
+                elif isinstance(item, str) and item.strip():
+                    out.append(
+                        {
+                            "command": item.strip(),
+                            "explanation": "Diagnostika: umumiy holatni aniqlash.",
+                        }
+                    )
+        if out:
+            return out[:12]
+        cmds = intent.get("diagnostic_commands")
+        if isinstance(cmds, list):
+            for c in cmds:
+                s = str(c).strip()
+                if s:
+                    out.append(
+                        {
+                            "command": s,
+                            "explanation": "Diagnostika: LLM tanlagan tekshiruv buyrug‘i.",
+                        }
+                    )
+        return out[:12]
+
+    @staticmethod
+    def _normalize_decision_steps(decision: dict[str, Any]) -> list[dict[str, str]]:
+        steps = decision.get("next_steps")
+        result: list[dict[str, str]] = []
+        if isinstance(steps, list):
+            for s in steps:
+                if isinstance(s, dict):
+                    c = str(s.get("command", "")).strip()
+                    e = str(s.get("explanation", "")).strip()
+                    if c:
+                        result.append(
+                            {
+                                "command": c,
+                                "explanation": e or "Qaror: keyingi amaliyot.",
+                            }
+                        )
+        if result:
+            return result[:8]
+        cmds = decision.get("commands")
+        if isinstance(cmds, list):
+            for c in cmds:
+                s = str(c).strip()
+                if s:
+                    result.append(
+                        {
+                            "command": s,
+                            "explanation": "Qaror: tuzatish yoki tekshirish (LLM qisqa reja).",
+                        }
+                    )
+        return result[:8]
+
+    @staticmethod
+    def _output_hints(output: str) -> list[str]:
+        hints: list[str] = []
+        low = output.lower()
+        if "permission denied" in low:
+            hints.append("Ehtimol huquq yetarli emas (sudo yoki foydalanuvchi).")
+        if "command not found" in low:
+            hints.append("Buyruq topilmadi — paket o‘rnatilmagan bo‘lishi mumkin.")
+        if "docker" in low and ("not found" in low or "no such file" in low):
+            hints.append("Docker CLI yoki daemon mavjud emas bo‘lishi mumkin.")
+        if "no space left on device" in low or "disk full" in low:
+            hints.append("Disk to‘lgan; bo‘sh joy kerak.")
+        if "connection refused" in low:
+            hints.append("Port yopiq yoki servis ishlamayapti.")
+        return hints
+
+    def _execute_ssh_command(
+        self,
+        ssh: SSHExecutor,
+        task_id: int,
+        cmd: str,
+        explanation: str,
+        phase: str,
+        history: list[dict[str, Any]],
+    ) -> None:
+        ok, reason = is_command_allowed(cmd)
+        if not ok:
+            self._add_step_skipped(cmd, reason or "blocked", explanation, phase)
+            history.append(
+                {
+                    "command": cmd,
+                    "explanation": explanation,
+                    "phase": phase,
+                    "output": reason,
+                    "skipped": True,
+                }
+            )
+            return
+        self._add_step_running(cmd, explanation, phase)
+        try:
+            res = ssh.run(cmd)
+            out = res.combined[:60000]
+            st = StepStatus.success.value if res.exit_code == 0 else StepStatus.error.value
+            self._finalize_last_step(task_id, out, st)
+            for h in self._output_hints(out):
+                self._log(f"{cmd[:80]}: {h}", "warning")
+            history.append(
+                {
+                    "command": cmd,
+                    "explanation": explanation,
+                    "phase": phase,
+                    "output": out,
+                    "exit_code": res.exit_code,
+                }
+            )
+        except Exception as ex:
+            self._finalize_last_step(task_id, str(ex), StepStatus.error.value)
+            self._log(f"SSH bajarish xatosi: {cmd[:120]} — {ex}", "error")
+            history.append(
+                {
+                    "command": cmd,
+                    "explanation": explanation,
+                    "phase": phase,
+                    "output": str(ex),
+                    "error": True,
+                }
+            )
 
     def run(self) -> None:
         task = self._task()
@@ -89,10 +270,20 @@ class DevOpsAgent:
             self._fail(f"AI intent xatosi: {e}")
             return
 
+        prob = intent.get("problem_summary")
+        if isinstance(prob, str) and prob.strip():
+            self._log(f"Intent: muammo — {prob.strip()[:2000]}")
+
         server_name = intent.get("server_name")
         server = task.server_id and self.db.get(Server, task.server_id)
         if not server:
             server = self._match_server(servers, server_name if isinstance(server_name, str) else None)
+        if not server and len(servers) == 1:
+            server = servers[0]
+            self._log(
+                f"Server nomi aniq emas; ro‘yxatda bitta server bor — '{server.name}' ishlatildi.",
+                "warning",
+            )
         if not server:
             self._fail(
                 "Server aniqlanmadi. Buyruqda server nomini yozing yoki server_id bering. "
@@ -105,19 +296,29 @@ class DevOpsAgent:
         self._log(f"Server aniqlandi: {server.name} ({server.host})")
 
         history: list[dict[str, Any]] = []
-
-        diag_cmds = intent.get("diagnostic_commands") or []
-        if not isinstance(diag_cmds, list):
-            diag_cmds = []
-        diag_cmds = [str(c).strip() for c in diag_cmds if str(c).strip()][:12]
-
-        if not diag_cmds:
-            diag_cmds = [
-                "uptime",
-                "df -h",
-                "free -m",
-                "ss -tulnp 2>/dev/null || netstat -tulnp 2>/dev/null || true",
+        diag_plan = self._normalize_diagnostic_plan(intent)
+        if not diag_plan:
+            diag_plan = [
+                {
+                    "command": "uptime",
+                    "explanation": "Diagnostika: yuklanish va ishlash vaqti.",
+                },
+                {
+                    "command": "df -h",
+                    "explanation": "Diagnostika: disk bo‘sh joyi.",
+                },
+                {
+                    "command": "free -m",
+                    "explanation": "Diagnostika: xotira.",
+                },
+                {
+                    "command": "ss -tulnp 2>/dev/null || netstat -tulnp 2>/dev/null || true",
+                    "explanation": "Diagnostika: ochiq portlar va jarayonlar.",
+                },
             ]
+
+        last_cmd_signature: tuple[str, ...] | None = None
+        stuck_rounds = 0
 
         try:
             with SSHExecutor(
@@ -127,110 +328,136 @@ class DevOpsAgent:
                 self.settings.ssh_connect_retries,
                 self.settings.ssh_retry_backoff_seconds,
             ) as ssh:
-                self._log("SSH ulanish: OK")
-                for cmd in diag_cmds:
-                    ok, reason = is_command_allowed(cmd)
-                    if not ok:
-                        self._add_step(cmd, reason, StepStatus.skipped.value)
-                        history.append({"command": cmd, "output": reason, "skipped": True})
-                        continue
-                    self._add_step(cmd, None, StepStatus.running.value)
-                    try:
-                        res = ssh.run(cmd)
-                        out = res.combined[:60000]
-                        st = StepStatus.success.value if res.exit_code == 0 else StepStatus.error.value
-                        self._update_last_step_output(task.id, out, st)
-                        history.append({"command": cmd, "output": out, "exit_code": res.exit_code})
-                    except Exception as ex:
-                        self._update_last_step_output(task.id, str(ex), StepStatus.error.value)
-                        history.append({"command": cmd, "output": str(ex), "error": True})
+                self._log("SSH ulanish: OK — diagnostika boshlandi.")
+                for item in diag_plan:
+                    self._execute_ssh_command(
+                        ssh,
+                        task.id,
+                        item["command"],
+                        item["explanation"],
+                        PHASE_DIAGNOSE,
+                        history,
+                    )
+
+                self._log("Diagnostika yakunlandi — qaror-verifikatsiya sikli.")
 
                 for iteration in range(self.settings.agent_max_iterations):
                     try:
-                        decision = self._decide(task.command_text, history, intent.get("problem_summary", ""))
+                        decision = self._decide_loop(
+                            task.command_text,
+                            history,
+                            str(intent.get("problem_summary", "")),
+                            iteration,
+                        )
                     except Exception as ex:
                         self._log(f"AI qaror xatosi: {ex}", "error")
                         break
 
                     analysis = decision.get("analysis", "")
-                    if analysis:
-                        self._log(f"Tahlil: {analysis}")
+                    if isinstance(analysis, str) and analysis.strip():
+                        self._log(f"Tahlil [{iteration + 1}]: {analysis.strip()[:3000]}")
 
                     if decision.get("done"):
                         summary = decision.get("user_summary") or "Jarayon yakunlandi."
                         self._finish_ok(summary)
                         return
 
-                    cmds = decision.get("commands") or []
-                    if not isinstance(cmds, list):
-                        cmds = []
-                    cmds = [str(c).strip() for c in cmds if str(c).strip()][:6]
-                    if not cmds:
-                        self._finish_ok(decision.get("user_summary") or "Qo‘shimcha buyruqlar talab qilinmadi.")
+                    step_phase_raw = decision.get("step_phase", "execute")
+                    step_phase = (
+                        PHASE_VERIFY
+                        if str(step_phase_raw).lower() == "verify"
+                        else PHASE_EXECUTE
+                    )
+
+                    planned = self._normalize_decision_steps(decision)
+                    if not planned:
+                        self._finish_ok(
+                            decision.get("user_summary")
+                            or "Keyingi buyruqlar bo‘sh — tekshirish uchun LLM javobini ko‘ring."
+                        )
                         return
 
-                    for cmd in cmds:
-                        ok, reason = is_command_allowed(cmd)
-                        if not ok:
-                            self._add_step(cmd, reason, StepStatus.skipped.value)
-                            history.append({"command": cmd, "output": reason, "skipped": True})
-                            continue
-                        self._add_step(cmd, None, StepStatus.running.value)
-                        try:
-                            res = ssh.run(cmd)
-                            out = res.combined[:60000]
-                            st = StepStatus.success.value if res.exit_code == 0 else StepStatus.error.value
-                            self._update_last_step_output(task.id, out, st)
-                            history.append({"command": cmd, "output": out, "exit_code": res.exit_code})
-                        except Exception as ex:
-                            self._update_last_step_output(task.id, str(ex), StepStatus.error.value)
-                            history.append({"command": cmd, "output": str(ex), "error": True})
+                    sig = tuple(p["command"] for p in planned)
+                    if sig == last_cmd_signature and sig:
+                        stuck_rounds += 1
+                        self._log(
+                            f"Takrorlanuvchi reja aniqlandi ({stuck_rounds}) — siklni to‘xtatish.",
+                            "warning",
+                        )
+                        if stuck_rounds >= 2:
+                            self._finish_ok(
+                                "Bir xil buyruqlar ketma-ket takrorlandi — cheksiz sikl oldini olish. "
+                                "Loglar va oxirgi chiqishlarni qo‘lda tekshiring."
+                            )
+                            return
+                    else:
+                        stuck_rounds = 0
+                    last_cmd_signature = sig
 
-                self._finish_ok("Iteratsiya limiti. Qo‘lda tekshiring.")
+                    self._log(
+                        f"Bajarish bosqichi [{iteration + 1}] ({step_phase}): {len(planned)} buyruq.",
+                    )
+                    for p in planned:
+                        self._execute_ssh_command(
+                            ssh,
+                            task.id,
+                            p["command"],
+                            p["explanation"],
+                            step_phase,
+                            history,
+                        )
+
+                self._finish_ok(
+                    "Iteratsiya limiti yetdi (verify/decide/execute). Qo‘shimcha tekshiruvni qo‘lda bajaring."
+                )
         except FileNotFoundError as e:
-            self._fail(f"SSH kalit: {e}")
+            self._fail(f"SSH kalit yoki fayl topilmadi: {e}")
         except Exception as e:
-            self._fail(f"SSH yoki bajarish xatosi: {e}")
-
-    def _update_last_step_output(self, task_id: int, output: str, status: str) -> None:
-        step = (
-            self.db.query(TaskStep)
-            .filter(TaskStep.task_id == task_id)
-            .order_by(TaskStep.step_order.desc())
-            .first()
-        )
-        if step:
-            step.output = output[:65000]
-            step.status = status
-            self.db.commit()
+            self._fail(f"SSH yoki agent xatosi: {e}")
 
     def _parse_intent(self, text: str, servers: list[Server]) -> dict[str, Any]:
         system = (
             "You are an infrastructure operator AI. "
-            "Given the user message and JSON list of servers, respond ONLY with JSON:\n"
-            '{"server_name": string or null (must match a server name from the list if possible), '
+            "Given the user message (may be Uzbek/Russian/English) and JSON list of servers, "
+            "respond ONLY with JSON:\n"
+            '{"server_name": string or null (best match from list), '
             '"problem_summary": string, '
-            '"diagnostic_commands": string[] (safe Linux shell commands, max 10), '
+            '"diagnostic_plan": [{"command": string, "explanation": string}] (max 10 items), '
             '"confidence": number }.\n'
-            "Prefer read-only diagnostics: systemctl status, journalctl -n 50 --no-pager, docker ps -a, "
-            "ss -tulnp, df -h, free -m, ping -c 2, curl -sI, ufw status, iptables -L -n."
+            "Each explanation must briefly say WHY that command helps diagnose the problem.\n"
+            "Use safe read-only commands: systemctl status, journalctl -n 80 --no-pager, "
+            "docker ps -a, ss -tulnp, df -h, free -m, ping -c 2, curl -sI -m 5, ufw status, iptables -L -n."
         )
         user = f"User message:\n{text}\n\nServers:\n{self._servers_payload(servers)}"
         return complete_json(system, user)
 
-    def _decide(self, original: str, history: list[dict[str, Any]], problem_summary: str) -> dict[str, Any]:
+    def _decide_loop(
+        self,
+        original: str,
+        history: list[dict[str, Any]],
+        problem_summary: str,
+        iteration: int,
+    ) -> dict[str, Any]:
         system = (
-            "You are a senior DevOps engineer. Based on command outputs, propose safe fix commands or verification. "
-            "Return ONLY JSON: "
-            '{"analysis": string, "commands": string[], "done": boolean, "user_summary": string}. '
-            "Set done true if the problem appears fixed or nothing else to try. "
-            "Allowed fixes examples: systemctl restart/start/enable, docker start/restart, ufw allow, "
-            "nginx -t && systemctl reload nginx, apt-get update (read-only ok). "
-            "Never suggest rm -rf /, dd, mkfs, shutdown, or piping curl to bash."
+            "You are a senior DevOps engineer running a diagnose → decide → execute → verify loop.\n"
+            f"Current loop iteration (0-based): {iteration}.\n"
+            "Based on ALL command outputs in history, either finish or propose the NEXT batch of shell commands.\n"
+            "Return ONLY JSON with this shape:\n"
+            '{"analysis": string (root cause / reasoning), '
+            '"step_phase": "execute" | "verify" (execute=fix/start/restart/config; verify=check status after change), '
+            '"next_steps": [{"command": string, "explanation": string}] (max 6; each explanation = WHY this command), '
+            '"done": boolean, '
+            '"user_summary": string }.\n'
+            "Rules:\n"
+            "- If the user problem appears RESOLVED by outputs, set done=true and user_summary explaining what was found.\n"
+            "- If more work is needed, done=false and fill next_steps with safe commands.\n"
+            "- After a fix, prefer step_phase verify with read-only checks (systemctl is-active, curl, ss).\n"
+            "- Never suggest: rm -rf /, dd, mkfs, shutdown, reboot, halt, piping curl|wget to bash.\n"
+            "- If docker/nginx not installed, say so in analysis and avoid useless restart commands for missing units.\n"
         )
         user = (
-            f"Original request:\n{original}\n\nProblem summary:\n{problem_summary}\n\n"
-            f"History:\n{json.dumps(history, ensure_ascii=False)[:50000]}"
+            f"Original user request:\n{original}\n\nProblem summary:\n{problem_summary}\n\n"
+            f"Full history (commands + explanations + outputs):\n{json.dumps(history, ensure_ascii=False)[:52000]}"
         )
         return complete_json(system, user)
 

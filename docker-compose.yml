@@ -92,7 +92,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       API_URL: http://api:8000
       HTTP_RETRIES: ${HTTP_RETRIES:-3}
-      POLL_INTERVAL_SEC: ${POLL_INTERVAL_SEC:-3}
+      POLL_INTERVAL_SEC: ${POLL_INTERVAL_SEC:-2}
     depends_on:
       - api
     restart: unless-stopped

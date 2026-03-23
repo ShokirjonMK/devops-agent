@@ -33,6 +33,8 @@ export type TaskStep = {
   command: string | null;
   output: string | null;
   status: string;
+  explanation: string | null;
+  phase: string | null;
   created_at: string;
 };
 

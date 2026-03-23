@@ -44,6 +44,14 @@ Qisman yangilash. Maydonlar ixtiyoriy.
 
 **204** — muvaffaqiyatli o‘chirish.
 
+### Task step (timeline)
+
+Har bir qadam:
+
+- `step_order`, `command`, `output`, `status`, `created_at`
+- `explanation` — nima uchun bu buyruq bajarilgani
+- `phase` — `diagnose` | `execute` | `verify`
+
 ## Tasks
 
 ### `GET /api/tasks`

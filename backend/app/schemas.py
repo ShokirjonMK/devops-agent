@@ -39,6 +39,8 @@ class TaskStepRead(BaseModel):
     command: str | None
     output: str | None
     status: str
+    explanation: str | None = None
+    phase: str | None = None
     created_at: datetime
 
 
@@ -53,7 +55,7 @@ class AuditLogRead(BaseModel):
 
 
 class TaskCreate(BaseModel):
-    command_text: str = Field(..., min_length=1)
+    command_text: str = Field(..., min_length=1, max_length=8000)
     server_id: int | None = None
 
 
@@ -78,7 +80,7 @@ class TaskDetailRead(TaskRead):
 class TaskSubmit(BaseModel):
     """Telegram / external clients."""
 
-    command_text: str = Field(..., min_length=1)
+    command_text: str = Field(..., min_length=1, max_length=8000)
     server_id: int | None = None
     user_id: str | None = None
     source: str = Field(default="web")

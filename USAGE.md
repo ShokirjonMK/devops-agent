@@ -1,8 +1,6 @@
-# Foydalanish (real misollar)
+# Foydalanish va test ssenariylari
 
-## 1. Server qo‘shish (alias)
-
-Web UI → **Serverlar** yoki API:
+## 1. Server (alias)
 
 ```bash
 curl -s -X POST http://localhost:8000/api/servers \
@@ -10,68 +8,65 @@ curl -s -X POST http://localhost:8000/api/servers \
   -d "{\"name\":\"sarbon\",\"host\":\"10.0.0.5\",\"user\":\"ubuntu\",\"auth_type\":\"ssh_key\",\"key_path\":\"/ssh-keys/id_rsa\"}"
 ```
 
-`name` — tabiiy buyruqda ishlatiladigan alias (`sarbon serverida …`).
+## 2. Misollar (tabiiy til)
 
-## 2. Vazifa yuborish (Web / API)
+```
+sarbon serverida nginx ishlamayapti
+prod serverda disk to‘lib qolgan
+test serverida docker ishlamayapti
+```
+
+Web Dashboard yoki:
 
 ```bash
 curl -s -X POST http://localhost:8000/api/tasks \
   -H "Content-Type: application/json" \
-  -d "{\"command_text\":\"sarbon serverida nginx holatini tekshir va kerak bo‘lsa restart qil\"}"
+  -d "{\"command_text\":\"sarbon serverida nginx ishlamayapti\"}"
 ```
 
-Javob: `202`, tana ichida `id`. Timeline:
+## 3. Timeline maydonlari (API / UI)
 
-```bash
-curl -s http://localhost:8000/api/tasks/1
+Har bir `task_steps` elementi:
+
+- `step_order`, `command`, `output`, `status`, `created_at`
+- **`phase`**: `diagnose` | `execute` | `verify`
+- **`explanation`**: nima uchun bu buyruq ishlatilgani (LLM)
+
+## 4. Simulyatsiya: kutiladigan buyruqlar va mantiq
+
+Quyidagi jadval **taxminiy** SSH qadamlar; aniq ketma-ketlik LLM va server holatiga bog‘liq.
+
+| Ssenari | Diagnostika (misol) | Tahlil / qaror | Tuzatish yoki verify (misol) |
+|---------|---------------------|----------------|------------------------------|
+| **nginx down** | `systemctl status nginx`, `journalctl -u nginx -n 50` | inactive / config xato | `nginx -t`, `systemctl restart nginx`, verify: `systemctl is-active nginx` |
+| **docker stopped** | `systemctl status docker`, `docker ps` | daemon o‘chiq | `systemctl start docker`, verify: `docker ps` |
+| **port closed** | `ss -tulnp`, `curl -sI localhost:80` | servis eshitmayapti / firewall | `ufw status`, servisni yoqish yoki `ufw allow` (filtrdan o‘tsa) |
+| **disk full** | `df -h`, `du -xh /var 2>/dev/null \| head` | partition 100% | Agent xavfsiz **tozalovchi** buyruqlarni cheklangan holda taklif qiladi; `rm -rf /` **bloklanadi** |
+| **SSH failure** | — | ulanish yoki kalit | vazifa `error`, `summary` + audit; ulanish **retry** |
+
+**Fix** qatlami: agent bir xil buyruqlar ketma-ket 2 marta takrorlansa, sikl **avtomatik to‘xtaydi** (cheksiz loop oldini olish).
+
+## 5. Telegram
+
+Bot yangi qadam qo‘shilganda progress xabarini yangilaydi (oxirgi 4 qadam + holat).
+
+## 6. Namuna API chiqishi (qisqa)
+
+```json
+{
+  "id": 1,
+  "status": "running",
+  "steps": [
+    {
+      "step_order": 1,
+      "phase": "diagnose",
+      "command": "systemctl status nginx",
+      "explanation": "Nginx unit holatini tekshirish.",
+      "status": "success",
+      "output": "..."
+    }
+  ]
+}
 ```
 
-## 3. Telegram
-
-Botga xabar (matn):
-
-`sarbon serverida docker konteynerlar ro‘yxatini ko‘rsat`
-
-Bot vazifa yaratadi (`/api/tasks/submit`) va holatni so‘rov bilan kuzatadi.
-
-## 4. Muammolar bo‘yicha misollar (agent xatti-harakati)
-
-Quyidagilar **LLM + SSH chiqishi** ga bog‘liq; agent diagnostika buyruqlarini ishga tushirib, keyin xavfsiz tuzatish buyruqlarini taklif qiladi.
-
-### 4.1 Nginx ishlamayapti
-
-**Buyruq:** `prod serverida nginx ishlamayapti`
-
-**Kutiladigan mantiq:** `systemctl status nginx`, loglar, so‘ngra `nginx -t`, `systemctl restart nginx` kabi qadamlar (LLM qaroriga ko‘ra).
-
-**Siz tekshirasiz:** Web UI → vazifa → qadamlar va `summary`.
-
-### 4.2 Docker to‘xtagan
-
-**Buyruq:** `test serverida docker ishlamayapti`
-
-**Kutiladigan:** `systemctl status docker`, `journalctl` fragmenti, `systemctl start docker` (agar LLM taklif qilsa va filtr ruxsat bersa).
-
-### 4.3 Port yopiq
-
-**Buyruq:** `sarbon serverida 80-port ochiqmi tekshir`
-
-**Kutiladigan:** `ss -tulnp` / `curl`, firewall holati.
-
-### 4.4 Disk to‘lib qolgan
-
-**Buyruq:** `prod serverida disk to‘lib qolgan`
-
-**Kutiladigan:** `df -h`, katta kataloglar; **TZ dagi “tozalash”** uchun agent faqat xavfsiz buyruqlarni bajaradi — `rm -rf /` kabi buyruqlar **filtr** bilan bloklanadi. Qo‘lda tozalash kerak bo‘lishi mumkin.
-
-### 4.5 SSH muvaffaqiyatsiz
-
-Kalit yo‘q, noto‘g‘ri `host`, tarmoq yopiq — vazifa `error`, `summary` va loglarda sabab. Worker **SSH ulanishni** bir necha marta qayta urinadi (`SSH_CONNECT_RETRIES` / config).
-
-## 5. Xavfsizlik eslatmalari
-
-- Productionda `AutoAddPolicy` o‘rniga known_hosts yoki siz tanlagan siyosatni qo‘llash tavsiya etiladi.
-- AI taklif qilgan har bir buyruq **command filter** dan o‘tadi.
-- Kritik muhitda alohida **read-only** rejim va inson tasdiqlash qo‘shish maqsadga muvofiq.
-
-Batafsil REST: [API.md](API.md).
+To‘liq REST: [API.md](API.md).
