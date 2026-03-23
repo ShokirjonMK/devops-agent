@@ -31,6 +31,8 @@ Production-style **avtonom DevOps / SysAdmin / NetAdmin AI operator**: tabiiy ti
 
 ## Hujjatlar
 
+**Modul-modul to‘liq qo‘llanma:** [docs/README.md](docs/README.md)
+
 | Fayl | Mazmun |
 |------|--------|
 | [INSTALL.md](INSTALL.md) | Docker va mahalliy o‘rnatish |
