@@ -25,6 +25,8 @@ class Settings(BaseSettings):
 
     ssh_connect_timeout: int = 20
     ssh_command_timeout: int = 120
+    ssh_connect_retries: int = 3
+    ssh_retry_backoff_seconds: float = 2.0
     agent_max_iterations: int = 8
 
     @property

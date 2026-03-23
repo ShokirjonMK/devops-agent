@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import io
+import logging
 import os
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import paramiko
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.models import Server
@@ -28,15 +32,22 @@ class SSHRunResult:
 
 
 class SSHExecutor:
-    def __init__(self, server: Server, connect_timeout: int, command_timeout: int) -> None:
+    def __init__(
+        self,
+        server: Server,
+        connect_timeout: int,
+        command_timeout: int,
+        connect_retries: int = 3,
+        retry_backoff_seconds: float = 2.0,
+    ) -> None:
         self.server = server
         self.connect_timeout = connect_timeout
         self.command_timeout = command_timeout
+        self.connect_retries = max(1, connect_retries)
+        self.retry_backoff_seconds = max(0.0, retry_backoff_seconds)
         self._client: paramiko.SSHClient | None = None
 
     def __enter__(self) -> SSHExecutor:
-        self._client = paramiko.SSHClient()
-        self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         key = self._load_private_key()
         connect_kw: dict = {
             "hostname": self.server.host,
@@ -49,8 +60,33 @@ class SSHExecutor:
             connect_kw["pkey"] = key
         elif os.environ.get("SSH_PASSWORD"):
             connect_kw["password"] = os.environ["SSH_PASSWORD"]
-        self._client.connect(**connect_kw)
-        return self
+        last_err: Exception | None = None
+        for attempt in range(self.connect_retries):
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            try:
+                client.connect(**connect_kw)
+                self._client = client
+                if attempt > 0:
+                    log.info("SSH %s: ulanish muvaffaqiyatli (urinish %s)", self.server.host, attempt + 1)
+                return self
+            except Exception as e:
+                last_err = e
+                try:
+                    client.close()
+                except Exception:
+                    pass
+                log.warning(
+                    "SSH %s ulanish xatosi (%s/%s): %s",
+                    self.server.host,
+                    attempt + 1,
+                    self.connect_retries,
+                    e,
+                )
+                if attempt < self.connect_retries - 1:
+                    time.sleep(self.retry_backoff_seconds * (attempt + 1))
+        assert last_err is not None
+        raise last_err
 
     def __exit__(self, *args: object) -> None:
         if self._client:
@@ -93,9 +129,13 @@ class SSHExecutor:
     def run(self, command: str) -> SSHRunResult:
         if not self._client:
             raise RuntimeError("SSH not connected")
-        stdin, stdout, stderr = self._client.exec_command(command, timeout=self.command_timeout)
-        stdin.close()
-        out = stdout.read().decode(errors="replace")
-        err = stderr.read().decode(errors="replace")
-        code = stdout.channel.recv_exit_status()
-        return SSHRunResult(out, err, code)
+        try:
+            stdin, stdout, stderr = self._client.exec_command(command, timeout=self.command_timeout)
+            stdin.close()
+            out = stdout.read().decode(errors="replace")
+            err = stderr.read().decode(errors="replace")
+            code = stdout.channel.recv_exit_status()
+            return SSHRunResult(out, err, code)
+        except Exception as e:
+            log.error("SSH buyruq xatosi (%s): %s", command[:120], e)
+            raise

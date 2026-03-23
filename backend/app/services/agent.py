@@ -120,7 +120,13 @@ class DevOpsAgent:
             ]
 
         try:
-            with SSHExecutor(server, self.settings.ssh_connect_timeout, self.settings.ssh_command_timeout) as ssh:
+            with SSHExecutor(
+                server,
+                self.settings.ssh_connect_timeout,
+                self.settings.ssh_command_timeout,
+                self.settings.ssh_connect_retries,
+                self.settings.ssh_retry_backoff_seconds,
+            ) as ssh:
                 self._log("SSH ulanish: OK")
                 for cmd in diag_cmds:
                     ok, reason = is_command_allowed(cmd)

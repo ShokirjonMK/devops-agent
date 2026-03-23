@@ -1,87 +1,45 @@
 # DevOps AI Agent
 
-`tz.md` va `tz1.md` bo‘yicha **avtonom DevOps / SysAdmin / NetAdmin AI agent**: tabiiy til buyrug‘i → serverni aniqlash → SSH diagnostika → AI qaror → bajarish → timeline va audit.
+`tz.md` / `tz1.md` bo‘yicha **AI DevOps operator** platformasi: tabiiy til → serverni aniqlash → SSH diagnostika → LLM qaror → filtrlangan bajarish → **timeline** va **audit**.
 
-## Arxitektura
+## Hujjatlar
 
-- **Backend:** FastAPI, PostgreSQL, Redis + Celery worker, Paramiko (SSH)
-- **AI:** OpenAI yoki `OPENAI_BASE_URL` orqali mos keluvchi API (Ollama va hokazo) yoki Anthropic (`AI_PROVIDER=anthropic`)
-- **Frontend:** React + Vite + Tailwind (dashboard, serverlar CRUD, vazifa timeline)
-- **Telegram:** alohida servis (`--profile telegram`)
+| Fayl | Mazmun |
+|------|--------|
+| [INSTALL.md](INSTALL.md) | Docker va mahalliy o‘rnatish, ishga tushirish |
+| [USAGE.md](USAGE.md) | Real buyruqlar, nginx/docker/port/disk/SSH ssenariylari |
+| [API.md](API.md) | REST endpointlar va JSON shakllar |
 
-## Tez deploy (Docker)
+## Stack
 
-1. Nusxa oling: `cp .env.example .env` va `OPENAI_API_KEY` (yoki Anthropic / mahalliy LLM) ni to‘ldiring.
+- **Backend:** FastAPI, PostgreSQL, **Redis + Celery**, Paramiko (SSH)
+- **AI:** OpenAI / `OPENAI_BASE_URL` (mos API) yoki Anthropic
+- **Frontend:** React + Vite + Tailwind
+- **Telegram:** **aiogram 3** (`telegram_bot/`)
 
-2. SSH kalit:
-   - **Variant A:** `ssh-keys/` papkasiga kalit qo‘ying va Web UI da server `key_path` ni masalan `/ssh-keys/id_rsa` qiling (worker konteynerida shu mount).
-   - **Variant B:** kalitni base64 qilib `.env` da `SSH_PRIVATE_KEY_B64` ga qo‘ying.
-
-3. Ishga tushiring:
+## Tez start (Docker)
 
 ```bash
+cp .env.example .env
+# OPENAI_API_KEY yoki mahalliy LLM URL; SSH kalit — ssh-keys/ yoki SSH_PRIVATE_KEY_B64
 docker compose up -d --build
 ```
 
-4. Brauzer: **http://localhost** (nginx orqali UI + `/api` proksi). To‘g‘ridan-to‘g‘ri API: **http://localhost:8000/docs**
+- **UI:** http://localhost  
+- **Swagger:** http://localhost:8000/docs  
 
-5. Telegram:
+**Telegram:**
 
 ```bash
 docker compose --profile telegram up -d --build
 ```
 
-(`TELEGRAM_BOT_TOKEN` `.env` da bo‘lishi kerak.)
-
-## Mahalliy ishlab chiqish
-
-**Backend**
-
-```bash
-cd backend
-python -m venv .venv
-.venv\Scripts\activate   # Windows
-pip install -r requirements.txt
-set DATABASE_URL=postgresql://devops:devops@localhost:5432/devops_agent
-alembic upgrade head
-uvicorn app.main:app --reload
-```
-
-Alohida terminalda Redis va Celery worker:
-
-```bash
-celery -A app.celery_app worker -l info
-```
-
-**Frontend**
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Vite `/api` ni `http://127.0.0.1:8000` ga proksi qiladi.
-
-## API qisqacha
-
-| Metod | Yo‘l | Tavsif |
-|--------|------|--------|
-| GET | `/api/servers` | Serverlar |
-| POST | `/api/servers` | Yangi server |
-| PUT/DELETE | `/api/servers/{id}` | Tahrirlash / o‘chirish |
-| GET | `/api/tasks` | Vazifalar |
-| POST | `/api/tasks` | Web buyruq |
-| POST | `/api/tasks/submit` | Telegram / tashqi |
-| GET | `/api/tasks/{id}` | Timeline + loglar |
-
 ## Xavfsizlik
 
-- Xavfli buyruqlar filtri (`rm -rf /`, `shutdown`, `dd`, va hokazo).
-- Barcha SSH buyruqlari va audit yozuvlari DB da saqlanadi.
+- Xavfli buyruqlar filtri (`backend/app/services/command_filter.py`)
+- SSH ulanish **qayta urinish** + loglar (`ssh_client.py`)
+- API validatsiya xatolari — JSON `detail` (422)
 
-## Qabul qilish (TZ)
+## Production eslatma
 
-- Chat (Web + Telegram) orqali buyruq
-- Server nomi / alias bilan aniqlash
-- SSH, diagnostika, AI qaror, bajarish, timeline
+SSH `AutoAddPolicy` qulay, lekin productionda host kalitini qat’iy tekshirish yaxshiroq. LLM chiqishi har doim to‘g‘ri bo‘lmasligi mumkin — muhim muhitda inson tasdiqlash qatlami qo‘shing.
