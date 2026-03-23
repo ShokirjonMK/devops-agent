@@ -11,6 +11,7 @@ from app.models import AuditLog, Server, Task, TaskStatus, TaskStep, StepStatus
 from app.services.command_filter import is_command_allowed
 from app.services.llm import complete_json
 from app.services.ssh_client import SSHExecutor
+from app.services.task_events import publish_task_event
 
 # Agent loop: diagnose → (decide → execute → [implicit verify via next iteration]) → repeat
 PHASE_DIAGNOSE = "diagnose"
@@ -60,6 +61,18 @@ class DevOpsAgent:
             )
         )
         self.db.commit()
+        st = self.db.query(TaskStep).filter(TaskStep.task_id == t.id).order_by(TaskStep.step_order.desc()).first()
+        if st:
+            publish_task_event(
+                t.id,
+                "step_start",
+                {
+                    "step_order": st.step_order,
+                    "command": (command or "")[:500],
+                    "phase": phase,
+                    "explanation": (explanation or "")[:800],
+                },
+            )
 
     def _finalize_last_step(self, task_id: int, output: str, status: str) -> None:
         step = (
@@ -72,6 +85,17 @@ class DevOpsAgent:
             step.output = (output or "")[:65000]
             step.status = status
             self.db.commit()
+            publish_task_event(
+                task_id,
+                "step_done",
+                {
+                    "step_order": step.step_order,
+                    "command": (step.command or "")[:500],
+                    "phase": step.phase,
+                    "status": status,
+                    "output_preview": (output or "")[:1200],
+                },
+            )
 
     def _add_step_skipped(
         self,
@@ -95,6 +119,18 @@ class DevOpsAgent:
             )
         )
         self.db.commit()
+        st = self.db.query(TaskStep).filter(TaskStep.task_id == t.id).order_by(TaskStep.step_order.desc()).first()
+        if st:
+            publish_task_event(
+                t.id,
+                "step_skipped",
+                {
+                    "step_order": st.step_order,
+                    "command": (command or "")[:500],
+                    "phase": phase,
+                    "reason": reason[:500],
+                },
+            )
 
     def _servers_payload(self, servers: list[Server]) -> str:
         return json.dumps(
@@ -258,6 +294,7 @@ class DevOpsAgent:
             return
         task.status = TaskStatus.running.value
         self.db.commit()
+        publish_task_event(task.id, "task_running", {"message": "Agent boshlandi"})
 
         servers = self.db.query(Server).order_by(Server.name).all()
         if not servers:
@@ -468,6 +505,7 @@ class DevOpsAgent:
             task.summary = msg
             self.db.add(AuditLog(task_id=task.id, message=msg, level="error"))
             self.db.commit()
+            publish_task_event(task.id, "task_error", {"summary": msg[:2000]})
 
     def _finish_ok(self, summary: str) -> None:
         task = self._task()
@@ -476,3 +514,4 @@ class DevOpsAgent:
             task.summary = summary
             self.db.add(AuditLog(task_id=task.id, message=summary, level="info"))
             self.db.commit()
+            publish_task_event(task.id, "task_done", {"summary": summary[:2000]})

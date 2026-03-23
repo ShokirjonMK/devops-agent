@@ -94,12 +94,14 @@ Brauzer: http://localhost:5173 — Vite `/api` ni `127.0.0.1:8000` ga proksi qil
 ### 2.5 Telegram bot (mahalliy)
 
 ```bash
-cd telegram_bot
+cd bot
 pip install -r requirements.txt
 set API_URL=http://127.0.0.1:8000
 set TELEGRAM_BOT_TOKEN=...
 python main.py
 ```
+
+Docker Compose da bot konteksti: `./bot` (`--profile telegram`).
 
 ## 3. Tekshiruv
 

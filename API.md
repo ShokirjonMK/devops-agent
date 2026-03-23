@@ -6,9 +6,31 @@ Asosiy prefiks: `/api`. JSON format.
 
 | Endpoint | Metod | Tavsif |
 |----------|--------|--------|
-| `/health` | GET | `{"status":"ok"}` |
+| `/health` | GET | Minimal: `{"status":"ok"}` |
+| `/api/health` | GET | DB + Redis: `status`, `components` |
 | `/docs` | GET | OpenAPI (Swagger UI) |
 | `/openapi.json` | GET | SXema |
+
+## Auth (v2)
+
+| Endpoint | Metod | Tavsif |
+|----------|--------|--------|
+| `/api/auth/telegram` | POST | Telegram Login Widget body (JSON) → JWT |
+
+`JWT_SECRET` va `TELEGRAM_BOT_TOKEN` sozlangan bo‘lishi kerak.
+
+## Credentials (shifrlangan vault)
+
+| Endpoint | Metod | Tavsif |
+|----------|--------|--------|
+| `/api/credentials` | GET | Bearer JWT — ro‘yxat (secret qaytarilmaydi) |
+| `/api/credentials` | POST | Bearer JWT + `name`, `credential_type`, `secret` |
+
+`ENCRYPTION_MASTER_KEY_B64` (32 bayt base64) majburiy.
+
+## WebSocket
+
+`WS /api/ws/tasks/{task_id}/stream` — agent Redis orqali yuborgan hodisalar (JSON qatorlar).
 
 ## Servers
 

@@ -16,6 +16,13 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
+    beat_schedule={
+        "beat-heartbeat-5m": {
+            "task": "beat_heartbeat",
+            "schedule": 300.0,
+        },
+    },
 )
 
-import app.worker_tasks  # noqa: E402, F401 — register Celery tasks
+import app.worker_tasks  # noqa: E402, F401
+import app.beat_tasks  # noqa: E402, F401

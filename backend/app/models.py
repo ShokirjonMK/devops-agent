@@ -1,7 +1,9 @@
 import enum
+import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, BigInteger, DateTime, ForeignKey, Integer, LargeBinary, String, Text, func, text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -30,6 +32,45 @@ class StepStatus(str, enum.Enum):
 class TaskSource(str, enum.Enum):
     web = "web"
     telegram = "telegram"
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True, nullable=False)
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    credentials: Mapped[list["CredentialVault"]] = relationship(
+        "CredentialVault", back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class CredentialVault(Base):
+    __tablename__ = "credential_vault"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    credential_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    cipher_text: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    iv: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    tag: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    salt: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship("User", back_populates="credentials")
 
 
 class Server(Base):

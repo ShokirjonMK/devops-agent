@@ -36,6 +36,8 @@ Production-style **avtonom DevOps / SysAdmin / NetAdmin AI operator**: tabiiy ti
 | [INSTALL.md](INSTALL.md) | Docker va mahalliy o‘rnatish |
 | [USAGE.md](USAGE.md) | Misollar va test ssenariylari |
 | [API.md](API.md) | REST |
+| [V2_QAMROV.md](V2_QAMROV.md) | v2 super-prompt qamrovi (nima qo‘shildi / nima qoldi) |
+| [TIZIM-MAQSAD-VA-HOLAT.md](TIZIM-MAQSAD-VA-HOLAT.md) | Maqsad va holat |
 
 ## Arxitektura (diagram)
 

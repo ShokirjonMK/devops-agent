@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type TaskDetail as TD } from "../api";
+import { useTaskStream } from "../hooks/useTaskStream";
 
 export default function TaskDetail() {
   const { id } = useParams();
   const [task, setTask] = useState<TD | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const numericId = id ? Number(id) : null;
+  const streamLines = useTaskStream(Number.isFinite(numericId) ? numericId : null);
 
   const load = () => {
     if (!id) return;
@@ -55,6 +58,15 @@ export default function TaskDetail() {
           </div>
         )}
       </div>
+
+      {streamLines.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-medium text-white">Real-time (WebSocket)</h2>
+          <pre className="max-h-48 overflow-auto rounded-lg border border-slate-800 bg-black/50 p-3 font-mono text-xs text-amber-100/90">
+            {streamLines.slice(-30).join("\n")}
+          </pre>
+        </section>
+      )}
 
       <section>
         <h2 className="mb-3 text-lg font-medium text-white">Timeline (bosqichlar)</h2>

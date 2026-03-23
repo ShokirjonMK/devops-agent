@@ -1,6 +1,14 @@
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+
 services:
   postgres:
     image: postgres:16-alpine
+    networks: [app-network]
     environment:
       POSTGRES_USER: devops
       POSTGRES_PASSWORD: devops
@@ -12,19 +20,23 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    networks: [app-network]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   api:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    networks: [app-network]
     environment:
       DATABASE_URL: postgresql://devops:devops@postgres:5432/devops_agent
       REDIS_URL: redis://redis:6379/0
@@ -35,7 +47,10 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AI_PROVIDER: ${AI_PROVIDER:-openai}
-      API_CORS_ORIGINS: http://localhost,http://127.0.0.1,http://localhost:5173
+      API_CORS_ORIGINS: http://localhost,http://127.0.0.1,http://localhost:5173,http://web
+      JWT_SECRET: ${JWT_SECRET:-}
+      ENCRYPTION_MASTER_KEY_B64: ${ENCRYPTION_MASTER_KEY_B64:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -43,12 +58,23 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     restart: unless-stopped
 
   worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    networks: [app-network]
     command: ["celery", "-A", "app.celery_app", "worker", "-l", "info"]
     environment:
       DATABASE_URL: postgresql://devops:devops@postgres:5432/devops_agent
@@ -74,30 +100,46 @@ services:
       - ${SSH_KEYS_DIR:-./ssh-keys}:/ssh-keys:ro
     restart: unless-stopped
 
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    networks: [app-network]
+    command: ["celery", "-A", "app.celery_app", "beat", "-l", "info"]
+    environment:
+      DATABASE_URL: postgresql://devops:devops@postgres:5432/devops_agent
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   web:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    networks: [app-network]
     ports:
       - "80:80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
   bot:
     build:
-      context: ./telegram_bot
+      context: ./bot
       dockerfile: Dockerfile
+    networks: [app-network]
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       API_URL: http://api:8000
       HTTP_RETRIES: ${HTTP_RETRIES:-3}
       POLL_INTERVAL_SEC: ${POLL_INTERVAL_SEC:-2}
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
     profiles:
       - telegram
-
-volumes:
-  pgdata:

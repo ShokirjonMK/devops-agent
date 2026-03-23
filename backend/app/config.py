@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     ssh_retry_backoff_seconds: float = 2.0
     agent_max_iterations: int = 8
 
+    jwt_secret: str = ""
+    jwt_expire_minutes: int = 1440
+    encryption_master_key_b64: str = ""
+    telegram_bot_token: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.api_cors_origins.split(",") if o.strip()]

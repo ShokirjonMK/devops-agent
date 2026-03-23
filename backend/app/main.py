@@ -1,6 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,22 +10,31 @@ from fastapi.responses import JSONResponse
 from app.api import api_router
 from app.config import get_settings
 
-log = logging.getLogger(__name__)
+
+def _configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s %(name)s %(message)s",
+    )
+    structlog.configure(
+        processors=[
+            structlog.processors.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.dev.ConsoleRenderer(),
+        ],
+    )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
-    log.info("API ishga tushmoqda")
+    _configure_logging()
+    structlog.get_logger("api").info("starting")
     yield
-    log.info("API to‘xtatilmoqda")
+    structlog.get_logger("api").info("stopping")
 
 
 settings = get_settings()
-app = FastAPI(title="DevOps AI Agent", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="DevOps AI Agent", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,5 +53,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
+def health_root() -> dict[str, str]:
+    """Minimal probe (Docker / LB)."""
     return {"status": "ok"}
