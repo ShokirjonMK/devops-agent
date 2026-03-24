@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.models import Task, TaskSource
+from app.dependencies import get_optional_current_user
+from app.models import Task, TaskSource, User
 from app.schemas import TaskCreate, TaskDetailRead, TaskRead, TaskSubmit
 from app.worker_tasks import run_agent_task
 
@@ -51,11 +52,22 @@ def submit_task_external(payload: TaskSubmit, db: Session = Depends(get_db)) -> 
     src = payload.source.strip().lower()
     if src not in (TaskSource.web.value, TaskSource.telegram.value):
         src = TaskSource.web.value
+    owner_user_id = None
+    if payload.user_id is not None and str(payload.user_id).strip():
+        try:
+            tid = int(str(payload.user_id).strip())
+        except ValueError:
+            tid = None
+        if tid is not None:
+            u = db.query(User).filter(User.telegram_id == tid).first()
+            if u:
+                owner_user_id = u.id
     task = Task(
         command_text=payload.command_text.strip(),
         server_id=payload.server_id,
         user_id=payload.user_id,
         source=src,
+        owner_user_id=owner_user_id,
     )
     db.add(task)
     db.commit()

@@ -42,3 +42,19 @@ def get_current_user(
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Foydalanuvchi topilmadi yoki nofaol")
     return user
+
+
+def get_optional_current_user(
+    db: Session = Depends(get_db),
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> User | None:
+    if creds is None or creds.scheme.lower() != "bearer":
+        return None
+    try:
+        uid = decode_token(creds.credentials)
+    except (ExpiredSignatureError, InvalidTokenError, ValueError):
+        return None
+    user = db.get(User, uid)
+    if not user or not user.is_active:
+        return None
+    return user

@@ -29,6 +29,11 @@ class DevOpsAgent:
     def _task(self) -> Task | None:
         return self.db.get(Task, self.task_id)
 
+    def _llm_context(self) -> dict[str, Any]:
+        t = self._task()
+        oid = t.owner_user_id if t else None
+        return {"db": self.db, "owner_user_id": oid}
+
     def _log(self, message: str, level: str = "info") -> None:
         t = self._task()
         if not t:
@@ -466,7 +471,7 @@ class DevOpsAgent:
             "docker ps -a, ss -tulnp, df -h, free -m, ping -c 2, curl -sI -m 5, ufw status, iptables -L -n."
         )
         user = f"User message:\n{text}\n\nServers:\n{self._servers_payload(servers)}"
-        return complete_json(system, user)
+        return complete_json(system, user, **self._llm_context())
 
     def _decide_loop(
         self,
@@ -496,7 +501,7 @@ class DevOpsAgent:
             f"Original user request:\n{original}\n\nProblem summary:\n{problem_summary}\n\n"
             f"Full history (commands + explanations + outputs):\n{json.dumps(history, ensure_ascii=False)[:52000]}"
         )
-        return complete_json(system, user)
+        return complete_json(system, user, **self._llm_context())
 
     def _fail(self, msg: str) -> None:
         task = self._task()

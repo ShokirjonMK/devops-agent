@@ -1,10 +1,27 @@
 const base = "";
 
+const TOKEN_KEY = "devops_agent_access_token";
+
+export function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setStoredToken(token: string | null): void {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+function authHeaders(): Record<string, string> {
+  const t = getStoredToken();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${base}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders(),
       ...(init?.headers || {}),
     },
   });
@@ -49,6 +66,7 @@ export type AuditLog = {
 export type Task = {
   id: number;
   user_id: string | null;
+  owner_user_id: string | null;
   server_id: number | null;
   command_text: string;
   status: string;
@@ -60,6 +78,21 @@ export type Task = {
 export type TaskDetail = Task & {
   steps: TaskStep[];
   logs: AuditLog[];
+};
+
+export type AiKeyMeta = {
+  id: string;
+  name: string;
+  provider: "openai" | "anthropic";
+  created_at: string | null;
+};
+
+export type AiKeyCreate = {
+  name?: string;
+  provider: "openai" | "anthropic";
+  api_key: string;
+  base_url?: string | null;
+  model?: string | null;
 };
 
 export const api = {
@@ -77,4 +110,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ command_text, server_id: server_id ?? null }),
     }),
+
+  listAiKeys: () =>
+    http<AiKeyMeta[]>("/api/ai-keys"),
+  createAiKey: (body: AiKeyCreate) =>
+    http<AiKeyMeta>("/api/ai-keys", { method: "POST", body: JSON.stringify(body) }),
+  deleteAiKey: (id: string) => http<void>(`/api/ai-keys/${id}`, { method: "DELETE" }),
 };

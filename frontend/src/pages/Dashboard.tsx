@@ -59,7 +59,8 @@ export default function Dashboard() {
       <div>
         <h1 className="text-2xl font-semibold text-white">Dashboard</h1>
         <p className="mt-1 text-slate-400">
-          Tabiiy til buyrug‘i yuboring — agent serverni aniqlaydi, SSH orqali diagnostika va tuzatishni bajaradi.
+          Tabiiy til buyrug‘i yuboring — agent serverni aniqlaydi, SSH orqali diagnostika va tuzatishni bajaradi. O‘z AI
+          kalitingizni ishlatish uchun JWT saqlang (AI kalitlar sahifasi) — shunda vazifa sizga bog‘lanadi.
         </p>
       </div>
 

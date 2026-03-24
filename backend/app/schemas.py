@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -64,6 +65,7 @@ class TaskRead(BaseModel):
 
     id: int
     user_id: str | None
+    owner_user_id: uuid.UUID | None = None
     server_id: int | None
     command_text: str
     status: str

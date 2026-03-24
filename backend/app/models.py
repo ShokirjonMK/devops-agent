@@ -2,7 +2,19 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, BigInteger, DateTime, ForeignKey, Integer, LargeBinary, String, Text, func, text
+from sqlalchemy import (
+    Boolean,
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,10 +63,18 @@ class User(Base):
     credentials: Mapped[list["CredentialVault"]] = relationship(
         "CredentialVault", back_populates="user", cascade="all, delete-orphan"
     )
+    tasks_owned: Mapped[list["Task"]] = relationship(
+        "Task",
+        foreign_keys="Task.owner_user_id",
+        back_populates="owner",
+    )
 
 
 class CredentialVault(Base):
     __tablename__ = "credential_vault"
+    __table_args__ = (
+        UniqueConstraint("user_id", "credential_type", "name", name="uq_credential_vault_user_type_name"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -92,6 +112,11 @@ class Task(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     server_id: Mapped[int | None] = mapped_column(ForeignKey("servers.id"), nullable=True)
     command_text: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=TaskStatus.pending.value)
@@ -100,6 +125,7 @@ class Task(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     server: Mapped["Server | None"] = relationship("Server", back_populates="tasks")
+    owner: Mapped["User | None"] = relationship("User", foreign_keys=[owner_user_id])
     steps: Mapped[list["TaskStep"]] = relationship(
         "TaskStep", back_populates="task", order_by="TaskStep.step_order"
     )

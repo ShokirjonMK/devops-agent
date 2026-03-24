@@ -52,7 +52,11 @@ def create_credential(
 ) -> CredentialVault:
     exists = (
         db.query(CredentialVault)
-        .filter(CredentialVault.user_id == user.id, CredentialVault.name == payload.name)
+        .filter(
+            CredentialVault.user_id == user.id,
+            CredentialVault.credential_type == payload.credential_type,
+            CredentialVault.name == payload.name,
+        )
         .first()
     )
     if exists:

@@ -1,4 +1,5 @@
 import { NavLink, Route, Routes } from "react-router-dom";
+import AiKeys from "./pages/AiKeys";
 import Dashboard from "./pages/Dashboard";
 import Servers from "./pages/Servers";
 import TaskDetail from "./pages/TaskDetail";
@@ -22,6 +23,9 @@ function Nav() {
           <NavLink to="/servers" className={link}>
             Serverlar
           </NavLink>
+          <NavLink to="/ai-keys" className={link}>
+            AI kalitlar
+          </NavLink>
         </nav>
       </div>
     </header>
@@ -36,6 +40,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/servers" element={<Servers />} />
+          <Route path="/ai-keys" element={<AiKeys />} />
           <Route path="/tasks/:id" element={<TaskDetail />} />
         </Routes>
       </main>
