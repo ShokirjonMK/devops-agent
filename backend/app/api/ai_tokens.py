@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -224,12 +224,12 @@ def patch_token(
     )
 
 
-@router.delete("/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{config_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 def delete_token(
     config_id: uuid.UUID,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(Role.OPERATOR)),
-) -> None:
+) -> Response:
     cfg = (
         db.query(AiTokenConfig)
         .filter(AiTokenConfig.id == config_id, AiTokenConfig.user_id == user.id)

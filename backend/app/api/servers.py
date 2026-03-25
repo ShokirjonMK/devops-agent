@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -60,12 +60,12 @@ def update_server(
     return row
 
 
-@router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 def delete_server(
     server_id: int,
     db: Session = Depends(get_db),
     _: object = Depends(require_role(Role.ADMIN)),
-) -> None:
+) -> Response:
     row = db.get(Server, server_id)
     if not row:
         raise HTTPException(status_code=404, detail="Server not found")
