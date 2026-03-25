@@ -1,5 +1,7 @@
 :::writing{variant=“standard” id=“73925”}
 
+**Versiya:** 2.0.0 (2026-03-25). O‘zgarishlar: [CHANGELOG.md](CHANGELOG.md).
+
 📘 TEXNIK TOPSHIRIQ (REVISED)
 
 Loyiha: Avtonom DevOps / SysAdmin / NetAdmin AI Agent (Web + Telegram)
@@ -329,9 +331,13 @@ AI-driven Infrastructure Operator
 
 ⸻
 
-15. Infratuzilma (2026-03 yangilanishi)
+15. Infratuzilma va v2 qatlam (2026-03 yangilanishi)
 
 - `docker-compose.yml`: umumiy `x-backend-env`, Redis parol bilan, `postgres_data` / `redis_data` / `ssh_keys` volumelari, API `GET /api/health` (DB, Redis, Celery worker soni), worker `api` healthy bo‘lgach ishga tushadi.
-- Shifrlash: `MASTER_ENCRYPTION_KEY` (64 hex) yoki `ENCRYPTION_MASTER_KEY_B64` (32 bayt base64).
+- Shifrlash: `MASTER_ENCRYPTION_KEY` (64 hex) yoki `ENCRYPTION_MASTER_KEY_B64` (32 bayt base64); yangi yozuvlar 32 bayt salt + 600k PBKDF2, eski 16 bayt + 390k o‘qiladi.
 - Bot: `POST /api/auth/bot-login` + `API_INTERNAL_SECRET`; muhitda `API_BASE_URL` yoki `API_URL`.
-- Batafsil o‘zgarishlar: `CHANGELOG.md`.
+- Migratsiya **005–006**: `ai_token_configs`, `server_metrics`, `alert_rules`, `admin_settings`, `notifications`, `platform_audit_logs`; `users.role`, `servers` monitoring maydonlari; tizim `users` qatori (`telegram_id = -1`) default AI kalitlari uchun.
+- API: `/api/ai-tokens`, `/api/admin/*`, RBAC (`owner/admin/operator/viewer`), WebSocket `?token=` ixtiyoriy JWT.
+- Celery beat: metrikalar, alertlar, retention, oy boshida AI usage reset.
+- Hujjatlar: `docs/SSH-SETUP.md`, `docs/AI-PROVIDERS.md`.
+- Batafsil: [CHANGELOG.md](CHANGELOG.md).

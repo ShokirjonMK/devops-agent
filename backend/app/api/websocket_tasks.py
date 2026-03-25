@@ -1,16 +1,28 @@
 from __future__ import annotations
 
 import redis.asyncio as aioredis
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 
 from app.config import get_settings
+from app.security_jwt import decode_token
 from app.services.task_events import task_channel
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
 
 
 @router.websocket("/tasks/{task_id}/stream")
-async def task_event_stream(websocket: WebSocket, task_id: int) -> None:
+async def task_event_stream(
+    websocket: WebSocket,
+    task_id: int,
+    token: str | None = Query(default=None),
+) -> None:
+    if token:
+        try:
+            decode_token(token)
+        except (ExpiredSignatureError, InvalidTokenError, ValueError):
+            await websocket.close(code=4401)
+            return
     await websocket.accept()
     settings = get_settings()
     client = aioredis.from_url(settings.redis_url, decode_responses=True)

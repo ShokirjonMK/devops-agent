@@ -1,5 +1,8 @@
 import { NavLink, Route, Routes } from "react-router-dom";
+import AdminUsers from "./pages/AdminUsers";
+import AITokens from "./pages/AITokens";
 import AiKeys from "./pages/AiKeys";
+import Analytics from "./pages/Analytics";
 import Dashboard from "./pages/Dashboard";
 import Servers from "./pages/Servers";
 import TaskDetail from "./pages/TaskDetail";
@@ -26,6 +29,15 @@ function Nav() {
           <NavLink to="/ai-keys" className={link}>
             AI kalitlar
           </NavLink>
+          <NavLink to="/credentials/tokens" className={link}>
+            AI tokens
+          </NavLink>
+          <NavLink to="/analytics" className={link}>
+            Analytics
+          </NavLink>
+          <NavLink to="/admin/users" className={link}>
+            Admin
+          </NavLink>
         </nav>
       </div>
     </header>
@@ -41,6 +53,9 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/servers" element={<Servers />} />
           <Route path="/ai-keys" element={<AiKeys />} />
+          <Route path="/credentials/tokens" element={<AITokens />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/tasks/:id" element={<TaskDetail />} />
         </Routes>
       </main>

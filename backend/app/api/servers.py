@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies import Role, require_role
 from app.models import Server
 from app.schemas import ServerCreate, ServerRead, ServerUpdate
 
@@ -14,7 +15,11 @@ def list_servers(db: Session = Depends(get_db)) -> list[Server]:
 
 
 @router.post("", response_model=ServerRead, status_code=status.HTTP_201_CREATED)
-def create_server(payload: ServerCreate, db: Session = Depends(get_db)) -> Server:
+def create_server(
+    payload: ServerCreate,
+    db: Session = Depends(get_db),
+    _: object = Depends(require_role(Role.ADMIN)),
+) -> Server:
     existing = db.query(Server).filter(Server.name == payload.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="Server name already exists")
@@ -34,7 +39,12 @@ def get_server(server_id: int, db: Session = Depends(get_db)) -> Server:
 
 
 @router.put("/{server_id}", response_model=ServerRead)
-def update_server(server_id: int, payload: ServerUpdate, db: Session = Depends(get_db)) -> Server:
+def update_server(
+    server_id: int,
+    payload: ServerUpdate,
+    db: Session = Depends(get_db),
+    _: object = Depends(require_role(Role.ADMIN)),
+) -> Server:
     row = db.get(Server, server_id)
     if not row:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -51,7 +61,11 @@ def update_server(server_id: int, payload: ServerUpdate, db: Session = Depends(g
 
 
 @router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_server(server_id: int, db: Session = Depends(get_db)) -> None:
+def delete_server(
+    server_id: int,
+    db: Session = Depends(get_db),
+    _: object = Depends(require_role(Role.ADMIN)),
+) -> None:
     row = db.get(Server, server_id)
     if not row:
         raise HTTPException(status_code=404, detail="Server not found")

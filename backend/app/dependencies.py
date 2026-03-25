@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from enum import Enum
+
 import jwt
 from fastapi import Depends, HTTPException, status
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
@@ -64,3 +66,35 @@ def get_optional_current_user(
     if not user or not user.is_active:
         return None
     return user
+
+
+class Role(str, Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    OPERATOR = "operator"
+    VIEWER = "viewer"
+
+
+ROLE_HIERARCHY: dict[str, int] = {
+    Role.VIEWER.value: 0,
+    Role.OPERATOR.value: 1,
+    Role.ADMIN.value: 2,
+    Role.OWNER.value: 3,
+}
+
+
+def require_role(min_role: Role):
+    """Minimal rol tekshiruvi (JWT bilan)."""
+
+    def checker(user: User = Depends(get_current_user)) -> User:
+        raw = (user.role or Role.VIEWER.value).lower()
+        ur = ROLE_HIERARCHY.get(raw, 0)
+        need = ROLE_HIERARCHY.get(min_role.value, 0)
+        if ur < need:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail=f"Ruxsat yetarli emas: kerak {min_role.value}",
+            )
+        return user
+
+    return checker

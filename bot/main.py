@@ -13,6 +13,8 @@ from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
+from handlers.extra_commands import router as extra_router
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -189,6 +191,7 @@ async def main() -> None:
         raise SystemExit("TELEGRAM_BOT_TOKEN is required")
     bot = Bot(token=TOKEN)
     dp = Dispatcher()
+    dp.include_router(extra_router)
     dp.include_router(router)
     log.info("Aiogram polling… API_URL=%s", API_URL)
     await dp.start_polling(bot)

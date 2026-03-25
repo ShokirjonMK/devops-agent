@@ -60,6 +60,8 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = Field(default="", validation_alias=AliasChoices("TELEGRAM_BOT_TOKEN"))
 
+    admin_telegram_ids: str = Field(default="", validation_alias=AliasChoices("ADMIN_TELEGRAM_IDS"))
+
     api_internal_secret: str = Field(default="", validation_alias=AliasChoices("API_INTERNAL_SECRET"))
     app_env: str = Field(default="development", validation_alias=AliasChoices("APP_ENV"))
 
@@ -73,6 +75,15 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.api_cors_origins.split(",") if o.strip()]
+
+    @property
+    def admin_telegram_ids_list(self) -> list[int]:
+        out: list[int] = []
+        for p in self.admin_telegram_ids.split(","):
+            p = p.strip()
+            if p.isdigit():
+                out.append(int(p))
+        return out
 
     @property
     def is_production(self) -> bool:

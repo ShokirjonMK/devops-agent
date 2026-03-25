@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.dependencies import get_optional_current_user
+from app.dependencies import Role, require_role
 from app.models import Task, TaskSource, User
 from app.schemas import TaskCreate, TaskDetailRead, TaskRead, TaskSubmit
 from app.worker_tasks import run_agent_task
@@ -34,7 +34,11 @@ def get_task(task_id: int, db: Session = Depends(get_db)) -> Task:
 
 
 @router.post("", response_model=TaskRead, status_code=status.HTTP_202_ACCEPTED)
-def create_task(payload: TaskCreate, db: Session = Depends(get_db)) -> Task:
+def create_task(
+    payload: TaskCreate,
+    db: Session = Depends(get_db),
+    _: object = Depends(require_role(Role.OPERATOR)),
+) -> Task:
     task = Task(
         command_text=payload.command_text.strip(),
         server_id=payload.server_id,

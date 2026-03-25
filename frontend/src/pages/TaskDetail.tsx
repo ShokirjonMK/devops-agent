@@ -8,7 +8,7 @@ export default function TaskDetail() {
   const [task, setTask] = useState<TD | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const numericId = id ? Number(id) : null;
-  const streamLines = useTaskStream(Number.isFinite(numericId) ? numericId : null);
+  const { lines: streamLines, state: wsState } = useTaskStream(Number.isFinite(numericId) ? numericId : null);
 
   const load = () => {
     if (!id) return;
@@ -59,9 +59,11 @@ export default function TaskDetail() {
         )}
       </div>
 
-      {streamLines.length > 0 && (
+      {(streamLines.length > 0 || wsState !== "closed") && (
         <section>
-          <h2 className="mb-3 text-lg font-medium text-white">Real-time (WebSocket)</h2>
+          <h2 className="mb-3 text-lg font-medium text-white">
+            Real-time (WebSocket) <span className="text-slate-500">· {wsState}</span>
+          </h2>
           <pre className="max-h-48 overflow-auto rounded-lg border border-slate-800 bg-black/50 p-3 font-mono text-xs text-amber-100/90">
             {streamLines.slice(-30).join("\n")}
           </pre>

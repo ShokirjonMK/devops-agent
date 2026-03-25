@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,6 +30,12 @@ class ServerRead(ServerBase):
 
     id: int
     created_at: datetime
+    environment: str = "production"
+    monitoring_enabled: bool = False
+    monitoring_interval_minutes: int = 5
+    last_check_status: str = "unknown"
+    last_check_at: datetime | None = None
+    server_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class TaskStepRead(BaseModel):
@@ -71,6 +78,7 @@ class TaskRead(BaseModel):
     status: str
     source: str
     summary: str | None
+    telegram_message_id: int | None = None
     created_at: datetime
 
 

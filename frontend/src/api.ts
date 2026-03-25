@@ -116,4 +116,57 @@ export const api = {
   createAiKey: (body: AiKeyCreate) =>
     http<AiKeyMeta>("/api/ai-keys", { method: "POST", body: JSON.stringify(body) }),
   deleteAiKey: (id: string) => http<void>(`/api/ai-keys/${id}`, { method: "DELETE" }),
+
+  listAiTokenProviders: () => http<Record<string, { base_url: string | null; models: string[] }>>(
+    "/api/ai-tokens/providers"
+  ),
+  listAiTokens: () =>
+    http<
+      {
+        id: string;
+        provider: string;
+        name: string;
+        is_default: boolean;
+        is_active: boolean;
+        usage_this_month_usd: string;
+        monthly_budget_usd: string | null;
+      }[]
+    >("/api/ai-tokens"),
+  createAiToken: (body: {
+    provider: string;
+    name: string;
+    token_value: string;
+    base_url?: string | null;
+    model_override?: string | null;
+    monthly_budget_usd?: string | null;
+    is_default?: boolean;
+  }) => http<unknown>("/api/ai-tokens", { method: "POST", body: JSON.stringify(body) }),
+  deleteAiToken: (id: string) => http<void>(`/api/ai-tokens/${id}`, { method: "DELETE" }),
+  testAiToken: (id: string) =>
+    http<{ success: boolean; latency_ms: number; model_used: string; detail: string | null }>(
+      `/api/ai-tokens/${id}/test`,
+      { method: "POST" }
+    ),
+
+  adminOverview: () =>
+    http<{
+      total_users: number;
+      active_users_today: number;
+      total_tasks_today: number;
+      total_tasks_week: number;
+      success_rate_percent: number;
+      total_servers: number;
+      servers_online: number;
+    }>("/api/admin/stats/overview"),
+  adminUsers: () =>
+    http<
+      {
+        id: string;
+        telegram_id: number;
+        username: string | null;
+        role: string;
+        is_active: boolean;
+        tasks_count: number;
+      }[]
+    >("/api/admin/users"),
 };

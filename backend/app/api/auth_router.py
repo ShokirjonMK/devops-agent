@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
+from app.dependencies import Role
 from app.models import User
 from app.security_jwt import create_access_token
 from app.services.telegram_auth import verify_telegram_login
@@ -45,18 +47,25 @@ def login_telegram(
 
     tid = int(body["id"])
     user = db.query(User).filter(User.telegram_id == tid).first()
+    owner_ids = settings.admin_telegram_ids_list
     if not user:
+        initial_role = Role.OWNER.value if tid in owner_ids else Role.OPERATOR.value
         user = User(
             telegram_id=tid,
             username=body.get("username") if isinstance(body.get("username"), str) else None,
             first_name=body.get("first_name") if isinstance(body.get("first_name"), str) else None,
             is_active=True,
+            role=initial_role,
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
     elif not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Hisob nofaol")
+    else:
+        if tid in owner_ids and user.role not in (Role.OWNER.value, Role.ADMIN.value):
+            user.role = Role.OWNER.value
+    user.last_seen_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(user)
 
     token = create_access_token(user.id)
     return TokenResponse(access_token=token)
@@ -93,15 +102,21 @@ def bot_login(body: BotLoginIn, db: Session = Depends(get_db)) -> BotLoginOut:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
     user = db.query(User).filter(User.telegram_id == body.telegram_id).first()
+    owner_ids = settings.admin_telegram_ids_list
     is_new = False
     if not user:
-        user = User(telegram_id=body.telegram_id, is_active=True)
+        initial_role = Role.OWNER.value if body.telegram_id in owner_ids else Role.OPERATOR.value
+        user = User(telegram_id=body.telegram_id, is_active=True, role=initial_role)
         db.add(user)
-        db.commit()
-        db.refresh(user)
         is_new = True
     elif not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Hisob nofaol")
+    else:
+        if body.telegram_id in owner_ids and user.role not in (Role.OWNER.value, Role.ADMIN.value):
+            user.role = Role.OWNER.value
+    user.last_seen_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(user)
 
     token = create_access_token(user.id, expire_minutes=60 * 24 * 7)
     return BotLoginOut(
