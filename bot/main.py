@@ -19,7 +19,9 @@ logging.basicConfig(
 )
 log = logging.getLogger("telegram_bot")
 
-API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000").rstrip("/")
+API_URL = (
+    os.environ.get("API_BASE_URL") or os.environ.get("API_URL") or "http://127.0.0.1:8000"
+).rstrip("/")
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "3"))
 POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL_SEC", "2"))

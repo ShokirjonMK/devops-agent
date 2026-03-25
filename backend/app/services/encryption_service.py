@@ -35,6 +35,23 @@ class EncryptedBlob:
         return cls(ciphertext=ciphertext, iv=iv, salt=salt, tag=tag)
 
 
+def build_encryption_service(
+    *,
+    master_encryption_key_hex: str = "",
+    encryption_master_key_b64: str = "",
+) -> EncryptionService | None:
+    """MASTER_ENCRYPTION_KEY (64 hex) ustuvor; aks holda ENCRYPTION_MASTER_KEY_B64."""
+    hx = (master_encryption_key_hex or "").strip()
+    if hx:
+        if len(hx) < 64:
+            raise ValueError("MASTER_ENCRYPTION_KEY kamida 64 ta hex belgi (32 bayt) bo‘lishi kerak")
+        return EncryptionService.from_hex_key(hx)
+    b64 = (encryption_master_key_b64 or "").strip()
+    if b64:
+        return EncryptionService.from_base64_key(b64)
+    return None
+
+
 class EncryptionService:
     _KEY_LEN = 32
     _IV_LEN = 12
@@ -50,6 +67,13 @@ class EncryptionService:
     @classmethod
     def from_base64_key(cls, b64_key: str) -> EncryptionService:
         raw = base64.b64decode(b64_key.strip(), validate=True)
+        return cls(raw)
+
+    @classmethod
+    def from_hex_key(cls, hex_key: str) -> EncryptionService:
+        raw = bytes.fromhex(hex_key.strip())
+        if len(raw) != cls._KEY_LEN:
+            raise ValueError(f"Hex kalit aynan {cls._KEY_LEN} bayt (64 hex) bo‘lishi kerak")
         return cls(raw)
 
     def _derive_aes_key(self, salt: bytes) -> bytes:

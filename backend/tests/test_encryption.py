@@ -29,3 +29,12 @@ def test_invalid_key_length() -> None:
     short = base64.b64encode(b"x" * 16).decode("ascii")
     with pytest.raises(ValueError):
         EncryptionService.from_base64_key(short)
+
+
+def test_encrypt_decrypt_hex_master() -> None:
+    import secrets as std_secrets
+
+    hx = std_secrets.token_hex(32)
+    enc = EncryptionService.from_hex_key(hx)
+    blob = enc.encrypt("hex-kalit", "ctx:u1")
+    assert enc.decrypt(blob, "ctx:u1") == "hex-kalit"

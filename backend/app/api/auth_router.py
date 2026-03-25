@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
@@ -59,3 +60,53 @@ def login_telegram(
 
     token = create_access_token(user.id)
     return TokenResponse(access_token=token)
+
+
+class BotLoginIn(BaseModel):
+    telegram_id: int
+    internal_secret: str
+
+
+class BotLoginOut(BaseModel):
+    access_token: str
+    user_id: str
+    is_new: bool
+    is_active: bool
+
+
+@router.post("/bot-login", response_model=BotLoginOut)
+def bot_login(body: BotLoginIn, db: Session = Depends(get_db)) -> BotLoginOut:
+    """Telegram bot uchun ichki maxfiy kalit bilan JWT (Web UI token formati bilan mos)."""
+    settings = get_settings()
+    if not settings.jwt_secret:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="JWT_SECRET sozlanmagan",
+        )
+    if not settings.api_internal_secret:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API_INTERNAL_SECRET sozlanmagan",
+        )
+    a, b = body.internal_secret, settings.api_internal_secret
+    if len(a) != len(b) or not secrets.compare_digest(a, b):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    user = db.query(User).filter(User.telegram_id == body.telegram_id).first()
+    is_new = False
+    if not user:
+        user = User(telegram_id=body.telegram_id, is_active=True)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        is_new = True
+    elif not user.is_active:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Hisob nofaol")
+
+    token = create_access_token(user.id, expire_minutes=60 * 24 * 7)
+    return BotLoginOut(
+        access_token=token,
+        user_id=str(user.id),
+        is_new=is_new,
+        is_active=user.is_active,
+    )

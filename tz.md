@@ -326,3 +326,12 @@ Mazkur tizim:
 
 👉 Bu — oddiy bot emas, balki:
 AI-driven Infrastructure Operator
+
+⸻
+
+15. Infratuzilma (2026-03 yangilanishi)
+
+- `docker-compose.yml`: umumiy `x-backend-env`, Redis parol bilan, `postgres_data` / `redis_data` / `ssh_keys` volumelari, API `GET /api/health` (DB, Redis, Celery worker soni), worker `api` healthy bo‘lgach ishga tushadi.
+- Shifrlash: `MASTER_ENCRYPTION_KEY` (64 hex) yoki `ENCRYPTION_MASTER_KEY_B64` (32 bayt base64).
+- Bot: `POST /api/auth/bot-login` + `API_INTERNAL_SECRET`; muhitda `API_BASE_URL` yoki `API_URL`.
+- Batafsil o‘zgarishlar: `CHANGELOG.md`.

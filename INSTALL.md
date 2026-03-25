@@ -19,10 +19,14 @@ To‘ldiring:
 
 | O‘zgaruvchi | Tavsif |
 |-------------|--------|
+| `JWT_SECRET` | JWT uchun maxfiy kalit (Docker stack uchun **majburiy**) |
+| `ENCRYPTION_MASTER_KEY_B64` | Vault shifrlash: `openssl rand -base64 32` (**majburiy**) |
 | `OPENAI_API_KEY` | OpenAI kaliti (yoki `OPENAI_BASE_URL` + mahalliy model) |
 | `AI_PROVIDER` | `openai` yoki `anthropic` |
 | `ANTHROPIC_API_KEY` | Claude uchun (agar `anthropic`) |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot (faqat bot profili bilan) |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot (`--profile telegram` bilan) |
+
+**Eslatma:** `docker/postgres/init-01-extensions.sql` faqat **birinchi** `pgdata` yaratilganda ishlaydi. Eski volume bilan muammo bo‘lsa, `docker compose down -v` (ma’lumot yo‘qoladi) yoki qo‘lda `CREATE EXTENSION pgcrypto`.
 
 ### 1.2 SSH
 
@@ -32,14 +36,18 @@ To‘ldiring:
 
 ### 1.3 Ishga tushirish
 
+Barcha servislar (Postgres, Redis, API + migratsiya, worker, beat, nginx web):
+
 ```bash
 docker compose up -d --build
 ```
 
-- Web UI: http://localhost (nginx → static + `/api` → API)
-- Swagger: http://localhost:8000/docs
+Migratsiya `api` konteyneri `docker-entrypoint.sh` orqali har safar `alembic upgrade head` bilan bajariladi.
 
-### 1.4 Telegram bot (aiogram)
+- Web UI: http://localhost:8080/ (standart `WEB_PORT`; `.env` da `WEB_PORT=80` qilsangiz http://localhost/)
+- API to‘g‘ridan-to‘g‘ri: http://localhost:8000/docs
+
+### 1.3.1 To‘liq stack + Telegram bot
 
 ```bash
 docker compose --profile telegram up -d --build

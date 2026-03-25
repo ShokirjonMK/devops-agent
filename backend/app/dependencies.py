@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User
 from app.security_jwt import decode_token
-from app.services.encryption_service import EncryptionService, encryption_service_from_env
+from app.services.encryption_service import EncryptionService, build_encryption_service
 from app.config import get_settings
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -17,11 +17,17 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 def get_encryption_service() -> EncryptionService:
     s = get_settings()
-    svc = encryption_service_from_env(s.encryption_master_key_b64)
+    try:
+        svc = build_encryption_service(
+            master_encryption_key_hex=s.master_encryption_key,
+            encryption_master_key_b64=s.encryption_master_key_b64,
+        )
+    except ValueError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e
     if svc is None:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Shifrlash sozlanmagan: ENCRYPTION_MASTER_KEY_B64 (32 bayt base64)",
+            detail="Shifrlash sozlanmagan: MASTER_ENCRYPTION_KEY (64 hex) yoki ENCRYPTION_MASTER_KEY_B64",
         )
     return svc
 

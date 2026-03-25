@@ -9,7 +9,7 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 # --- runtime ---
 FROM python:3.12-slim
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends openssh-client \
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-client curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /root/.local /root/.local
@@ -22,7 +22,7 @@ COPY alembic ./alembic
 COPY app ./app
 COPY tests ./tests
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 EXPOSE 8000
 ENTRYPOINT ["/docker-entrypoint.sh"]

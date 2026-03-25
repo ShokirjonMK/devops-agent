@@ -11,11 +11,18 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import CredentialVault
-from app.services.encryption_service import EncryptedBlob, EncryptionService, encryption_service_from_env
+from app.services.encryption_service import EncryptedBlob, EncryptionService, build_encryption_service
 
 
 def _encryption_or_none() -> EncryptionService | None:
-    return encryption_service_from_env(get_settings().encryption_master_key_b64)
+    s = get_settings()
+    try:
+        return build_encryption_service(
+            master_encryption_key_hex=s.master_encryption_key,
+            encryption_master_key_b64=s.encryption_master_key_b64,
+        )
+    except ValueError:
+        return None
 
 
 def _parse_payload(plaintext: str) -> dict[str, Any]:

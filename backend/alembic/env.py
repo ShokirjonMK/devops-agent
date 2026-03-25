@@ -27,7 +27,10 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    return os.environ.get("DATABASE_URL", "postgresql://devops:devops@localhost:5432/devops_agent")
+    u = os.environ.get("DATABASE_URL", "postgresql://devops:devops@localhost:5432/devops_agent")
+    if u.startswith("postgresql+asyncpg://"):
+        return "postgresql://" + u.removeprefix("postgresql+asyncpg://")
+    return u
 
 
 def run_migrations_offline() -> None:
