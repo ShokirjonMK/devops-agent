@@ -371,6 +371,12 @@ class DevOpsAgent:
         last_cmd_signature: tuple[str, ...] | None = None
         stuck_rounds = 0
 
+        # Decrypt SSH password for password-auth servers
+        _ssh_password: str | None = None
+        if getattr(server, "auth_type", "ssh_key") == "password":
+            from app.api.servers import decrypt_ssh_password
+            _ssh_password = decrypt_ssh_password(server)
+
         try:
             with SSHExecutor(
                 server,
@@ -378,6 +384,7 @@ class DevOpsAgent:
                 self.settings.ssh_command_timeout,
                 self.settings.ssh_connect_retries,
                 self.settings.ssh_retry_backoff_seconds,
+                password=_ssh_password,
             ) as ssh:
                 self._log("SSH ulanish: OK — diagnostika boshlandi.")
                 for item in diag_plan:

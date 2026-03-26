@@ -20,7 +20,21 @@ def complete_json(
     owner_user_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     settings = get_settings()
-    if settings.ai_provider == "anthropic":
+    provider = settings.ai_provider  # global default
+
+    # Auto-detect: use whichever key the user actually configured in vault
+    if db and owner_user_id:
+        anthropic_cfg = user_anthropic_config(db, owner_user_id) or {}
+        openai_cfg = user_openai_config(db, owner_user_id) or {}
+        has_anthropic = bool(anthropic_cfg.get("api_key"))
+        has_openai = bool(openai_cfg.get("api_key"))
+        if has_anthropic and not has_openai:
+            provider = "anthropic"
+        elif has_openai and not has_anthropic:
+            provider = "openai"
+        # if both or neither: use global setting
+
+    if provider == "anthropic":
         return _anthropic_json(system, user, settings, db=db, owner_user_id=owner_user_id)
     return _openai_json(system, user, settings, db=db, owner_user_id=owner_user_id)
 

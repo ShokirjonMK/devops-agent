@@ -253,6 +253,7 @@ class Server(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
     host: Mapped[str] = mapped_column(String(512), nullable=False)
+    port: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("22"))
     user: Mapped[str] = mapped_column(String(128), nullable=False, default="root")
     auth_type: Mapped[str] = mapped_column(String(32), nullable=False, default=AuthType.ssh_key.value)
     key_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)

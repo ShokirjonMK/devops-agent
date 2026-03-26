@@ -8,21 +8,24 @@ from pydantic import BaseModel, ConfigDict, Field
 class ServerBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     host: str = Field(..., min_length=1, max_length=512)
+    port: int = Field(default=22, ge=1, le=65535)
     user: str = Field(default="root", max_length=128)
     auth_type: str = Field(default="ssh_key", max_length=32)
     key_path: str | None = Field(default=None, max_length=1024)
 
 
 class ServerCreate(ServerBase):
-    pass
+    ssh_password: str | None = Field(default=None, max_length=1024)
 
 
 class ServerUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     host: str | None = Field(default=None, min_length=1, max_length=512)
+    port: int | None = Field(default=None, ge=1, le=65535)
     user: str | None = Field(default=None, max_length=128)
     auth_type: str | None = Field(default=None, max_length=32)
     key_path: str | None = Field(default=None, max_length=1024)
+    ssh_password: str | None = Field(default=None, max_length=1024)
 
 
 class ServerRead(ServerBase):

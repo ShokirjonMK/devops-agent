@@ -39,18 +39,22 @@ class SSHExecutor:
         command_timeout: int,
         connect_retries: int = 3,
         retry_backoff_seconds: float = 2.0,
+        password: str | None = None,
     ) -> None:
         self.server = server
         self.connect_timeout = connect_timeout
         self.command_timeout = command_timeout
         self.connect_retries = max(1, connect_retries)
         self.retry_backoff_seconds = max(0.0, retry_backoff_seconds)
+        self._password = password
         self._client: paramiko.SSHClient | None = None
 
     def __enter__(self) -> SSHExecutor:
         key = self._load_private_key()
+        port = getattr(self.server, "port", None) or 22
         connect_kw: dict = {
             "hostname": self.server.host,
+            "port": port,
             "username": self.server.user,
             "timeout": self.connect_timeout,
             "allow_agent": False,
@@ -58,6 +62,8 @@ class SSHExecutor:
         }
         if key is not None:
             connect_kw["pkey"] = key
+        elif self._password:
+            connect_kw["password"] = self._password
         elif os.environ.get("SSH_PASSWORD"):
             connect_kw["password"] = os.environ["SSH_PASSWORD"]
         last_err: Exception | None = None

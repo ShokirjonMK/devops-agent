@@ -37,8 +37,9 @@ export type Server = {
   id: number;
   name: string;
   host: string;
+  port: number;
   user: string;
-  auth_type: string;
+  auth_type: string; // ssh_key | password | key_b64
   key_path: string | null;
   created_at: string;
   environment?: string;
@@ -115,9 +116,9 @@ export const api = {
 
 
   listServers: () => http<Server[]>("/api/servers"),
-  createServer: (body: Omit<Server, "id" | "created_at">) =>
+  createServer: (body: Omit<Server, "id" | "created_at"> & { ssh_password?: string }) =>
     http<Server>("/api/servers", { method: "POST", body: JSON.stringify(body) }),
-  updateServer: (id: number, body: Partial<Omit<Server, "id" | "created_at">>) =>
+  updateServer: (id: number, body: Partial<Omit<Server, "id" | "created_at">> & { ssh_password?: string }) =>
     http<Server>(`/api/servers/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteServer: (id: number) => http<void>(`/api/servers/${id}`, { method: "DELETE" }),
 
