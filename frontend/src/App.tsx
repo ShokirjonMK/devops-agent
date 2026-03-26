@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
+import { getStoredToken, setStoredToken } from "./api";
 import AdminAIProviders from "./pages/Admin/AdminAIProviders";
 import AdminAudit from "./pages/Admin/AdminAudit";
 import AdminSettings from "./pages/Admin/AdminSettings";
@@ -9,10 +11,11 @@ import AiKeys from "./pages/AiKeys";
 import Analytics from "./pages/Analytics";
 import SSHCredentials from "./pages/Credentials/SSH";
 import Dashboard from "./pages/Dashboard";
+import Login from "./pages/Login";
 import Servers from "./pages/Servers";
 import TaskDetail from "./pages/TaskDetail";
 
-function Nav() {
+function Nav({ onLogout }: { onLogout: () => void }) {
   const link = ({ isActive }: { isActive: boolean }) =>
     `rounded-lg px-3 py-2 text-sm font-medium transition ${
       isActive ? "bg-emerald-500/20 text-emerald-300" : "text-slate-400 hover:text-white"
@@ -24,7 +27,7 @@ function Nav() {
           <span className="text-lg font-semibold tracking-tight text-white">DevOps AI Agent</span>
           <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-400">Web</span>
         </div>
-        <nav className="flex gap-1">
+        <nav className="flex gap-1 flex-wrap">
           <NavLink to="/" end className={link}>
             Dashboard
           </NavLink>
@@ -46,6 +49,12 @@ function Nav() {
           <NavLink to="/admin/users" className={link}>
             Admin
           </NavLink>
+          <button
+            onClick={onLogout}
+            className="rounded-lg px-3 py-2 text-sm font-medium text-slate-400 hover:text-rose-400 transition"
+          >
+            Chiqish
+          </button>
         </nav>
       </div>
     </header>
@@ -53,9 +62,21 @@ function Nav() {
 }
 
 export default function App() {
+  const [loggedIn, setLoggedIn] = useState<boolean>(() => !!getStoredToken());
+
+  const handleLogin = () => setLoggedIn(true);
+  const handleLogout = () => {
+    setStoredToken(null);
+    setLoggedIn(false);
+  };
+
+  if (!loggedIn) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900">
-      <Nav />
+      <Nav onLogout={handleLogout} />
       <main className="mx-auto max-w-6xl px-4 py-8">
         <Routes>
           <Route path="/" element={<Dashboard />} />

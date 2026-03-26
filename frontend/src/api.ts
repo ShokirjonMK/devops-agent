@@ -101,7 +101,19 @@ export type AiKeyCreate = {
   model?: string | null;
 };
 
+export type AuthToken = {
+  access_token: string;
+  token_type: string;
+};
+
 export const api = {
+  telegramLogin: (data: Record<string, unknown>) =>
+    http<AuthToken>("/api/auth/telegram", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+
   listServers: () => http<Server[]>("/api/servers"),
   createServer: (body: Omit<Server, "id" | "created_at">) =>
     http<Server>("/api/servers", { method: "POST", body: JSON.stringify(body) }),
