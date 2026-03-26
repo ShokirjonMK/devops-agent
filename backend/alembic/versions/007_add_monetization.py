@@ -5,6 +5,7 @@ Revises: 006
 """
 from __future__ import annotations
 
+import json
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -35,34 +36,50 @@ def upgrade() -> None:
     )
 
     # ── seed plans ────────────────────────────────────────────────────────
-    op.execute("""
-    INSERT INTO plans (id, name, price_usd, price_uzs, limits, features_list, sort_order) VALUES
-    ('free', 'Free', 0, 0,
-     '{"servers_max":3,"tasks_per_day":10,"tasks_per_month":50,"team_members":1,
-       "monitoring_enabled":false,"custom_ai_keys":false,"analytics_days":7,
-       "webhook_alerts":false,"api_access":false,"sla_percent":99.0}'::jsonb,
-     '["3 ta server","50 task/oy","Community AI","7 kunlik analytics"]'::jsonb,
-     1),
-    ('pro', 'Pro', 15, 190000,
-     '{"servers_max":20,"tasks_per_day":200,"tasks_per_month":-1,"team_members":1,
-       "monitoring_enabled":true,"custom_ai_keys":true,"analytics_days":90,
-       "webhook_alerts":true,"api_access":false,"sla_percent":99.5}'::jsonb,
-     '["20 ta server","Cheksiz task","O''z AI kalitlari","Monitoring + alertlar","90 kunlik analytics","Webhook bildirishnomalar"]'::jsonb,
-     2),
-    ('team', 'Team', 49, 620000,
-     '{"servers_max":-1,"tasks_per_day":-1,"tasks_per_month":-1,"team_members":10,
-       "monitoring_enabled":true,"custom_ai_keys":true,"analytics_days":365,
-       "webhook_alerts":true,"api_access":true,"sla_percent":99.9}'::jsonb,
-     '["Cheksiz server","10 jamoa a''zosi","To''liq RBAC","API access","1 yillik analytics","SLA 99.9%","Priority support"]'::jsonb,
-     3),
-    ('enterprise', 'Enterprise', 299, 3800000,
-     '{"servers_max":-1,"tasks_per_day":-1,"tasks_per_month":-1,"team_members":-1,
-       "monitoring_enabled":true,"custom_ai_keys":true,"analytics_days":-1,
-       "webhook_alerts":true,"api_access":true,"white_label":true,"sla_percent":99.99}'::jsonb,
-     '["Cheksiz hamma narsa","White-label","On-premise variant","Dedicated support","Custom SLA"]'::jsonb,
-     4)
-    ON CONFLICT (id) DO NOTHING;
-    """)
+    _plans = [
+        {
+            "id": "free", "name": "Free", "price_usd": 0, "price_uzs": 0, "sort_order": 1,
+            "limits": json.dumps({"servers_max": 3, "tasks_per_day": 10, "tasks_per_month": 50,
+                                  "team_members": 1, "monitoring_enabled": False, "custom_ai_keys": False,
+                                  "analytics_days": 7, "webhook_alerts": False, "api_access": False, "sla_percent": 99.0}),
+            "features_list": json.dumps(["3 ta server", "50 task/oy", "Community AI", "7 kunlik analytics"]),
+        },
+        {
+            "id": "pro", "name": "Pro", "price_usd": 15, "price_uzs": 190000, "sort_order": 2,
+            "limits": json.dumps({"servers_max": 20, "tasks_per_day": 200, "tasks_per_month": -1,
+                                  "team_members": 1, "monitoring_enabled": True, "custom_ai_keys": True,
+                                  "analytics_days": 90, "webhook_alerts": True, "api_access": False, "sla_percent": 99.5}),
+            "features_list": json.dumps(["20 ta server", "Cheksiz task", "O'z AI kalitlari",
+                                         "Monitoring + alertlar", "90 kunlik analytics", "Webhook bildirishnomalar"]),
+        },
+        {
+            "id": "team", "name": "Team", "price_usd": 49, "price_uzs": 620000, "sort_order": 3,
+            "limits": json.dumps({"servers_max": -1, "tasks_per_day": -1, "tasks_per_month": -1,
+                                  "team_members": 10, "monitoring_enabled": True, "custom_ai_keys": True,
+                                  "analytics_days": 365, "webhook_alerts": True, "api_access": True, "sla_percent": 99.9}),
+            "features_list": json.dumps(["Cheksiz server", "10 jamoa a'zosi", "To'liq RBAC",
+                                         "API access", "1 yillik analytics", "SLA 99.9%", "Priority support"]),
+        },
+        {
+            "id": "enterprise", "name": "Enterprise", "price_usd": 299, "price_uzs": 3800000, "sort_order": 4,
+            "limits": json.dumps({"servers_max": -1, "tasks_per_day": -1, "tasks_per_month": -1,
+                                  "team_members": -1, "monitoring_enabled": True, "custom_ai_keys": True,
+                                  "analytics_days": -1, "webhook_alerts": True, "api_access": True,
+                                  "white_label": True, "sla_percent": 99.99}),
+            "features_list": json.dumps(["Cheksiz hamma narsa", "White-label", "On-premise variant",
+                                         "Dedicated support", "Custom SLA"]),
+        },
+    ]
+    conn = op.get_bind()
+    for p in _plans:
+        conn.execute(
+            sa.text(
+                "INSERT INTO plans (id, name, price_usd, price_uzs, limits, features_list, sort_order) "
+                "VALUES (:id, :name, :price_usd, :price_uzs, :limits::jsonb, :features_list::jsonb, :sort_order) "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            p,
+        )
 
     # ── user_subscriptions ────────────────────────────────────────────────
     op.create_table(
@@ -83,15 +100,13 @@ def upgrade() -> None:
     op.create_index("ix_user_subscriptions_user_id", "user_subscriptions", ["user_id"])
 
     # Existing users → Free plan
-    op.execute("""
-    INSERT INTO user_subscriptions (user_id, plan_id, status, current_period_start, current_period_end)
-    SELECT id, 'free', 'active', now(), now() + interval '100 years'
-    FROM users
-    ON CONFLICT (user_id) DO NOTHING;
-    """)
+    conn.execute(sa.text(
+        "INSERT INTO user_subscriptions (user_id, plan_id, status, current_period_start, current_period_end) "
+        "SELECT id, 'free', 'active', now(), now() + interval '100 years' FROM users ON CONFLICT (user_id) DO NOTHING"
+    ))
 
     # Trigger: new users auto get Free plan
-    op.execute("""
+    conn.execute(sa.text("""
     CREATE OR REPLACE FUNCTION auto_assign_free_plan()
     RETURNS TRIGGER AS $$
     BEGIN
@@ -100,11 +115,12 @@ def upgrade() -> None:
         ON CONFLICT (user_id) DO NOTHING;
         RETURN NEW;
     END;
-    $$ LANGUAGE plpgsql;
-
-    CREATE TRIGGER trigger_user_free_plan
-    AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION auto_assign_free_plan();
-    """)
+    $$ LANGUAGE plpgsql
+    """))
+    conn.execute(sa.text(
+        "CREATE TRIGGER trigger_user_free_plan "
+        "AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION auto_assign_free_plan()"
+    ))
 
     # ── ai_credit_balances ────────────────────────────────────────────────
     op.create_table(
@@ -117,10 +133,10 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
 
-    op.execute("""
-    INSERT INTO ai_credit_balances (user_id, balance_usd)
-    SELECT id, 0 FROM users ON CONFLICT (user_id) DO NOTHING;
-    """)
+    conn.execute(sa.text(
+        "INSERT INTO ai_credit_balances (user_id, balance_usd) "
+        "SELECT id, 0 FROM users ON CONFLICT (user_id) DO NOTHING"
+    ))
 
     # ── ai_credit_transactions ────────────────────────────────────────────
     op.create_table(
@@ -152,12 +168,11 @@ def upgrade() -> None:
     op.create_index("ix_referral_codes_owner_id", "referral_codes", ["owner_id"])
 
     # Existing users get referral codes
-    op.execute("""
-    INSERT INTO referral_codes (code, owner_id)
-    SELECT upper(left(replace(gen_random_uuid()::text, '-', ''), 8)), id
-    FROM users
-    ON CONFLICT (owner_id) DO NOTHING;
-    """)
+    conn.execute(sa.text(
+        "INSERT INTO referral_codes (code, owner_id) "
+        "SELECT upper(left(replace(gen_random_uuid()::text, '-', ''), 8)), id "
+        "FROM users ON CONFLICT (owner_id) DO NOTHING"
+    ))
 
     # ── referral_conversions ──────────────────────────────────────────────
     op.create_table(
@@ -184,10 +199,10 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
 
-    op.execute("""
-    INSERT INTO user_onboarding (user_id, step)
-    SELECT id, 0 FROM users ON CONFLICT (user_id) DO NOTHING;
-    """)
+    conn.execute(sa.text(
+        "INSERT INTO user_onboarding (user_id, step) "
+        "SELECT id, 0 FROM users ON CONFLICT (user_id) DO NOTHING"
+    ))
 
     # ── payment_records ───────────────────────────────────────────────────
     op.create_table(
@@ -210,8 +225,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP TRIGGER IF EXISTS trigger_user_free_plan ON users;")
-    op.execute("DROP FUNCTION IF EXISTS auto_assign_free_plan();")
+    conn = op.get_bind()
+    conn.execute(sa.text("DROP TRIGGER IF EXISTS trigger_user_free_plan ON users"))
+    conn.execute(sa.text("DROP FUNCTION IF EXISTS auto_assign_free_plan()"))
     op.drop_table("payment_records")
     op.drop_table("user_onboarding")
     op.drop_table("referral_conversions")
