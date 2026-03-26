@@ -75,7 +75,7 @@ def upgrade() -> None:
         conn.execute(
             sa.text(
                 "INSERT INTO plans (id, name, price_usd, price_uzs, limits, features_list, sort_order) "
-                "VALUES (:id, :name, :price_usd, :price_uzs, :limits::jsonb, :features_list::jsonb, :sort_order) "
+                "VALUES (:id, :name, :price_usd, :price_uzs, CAST(:limits AS jsonb), CAST(:features_list AS jsonb), :sort_order) "
                 "ON CONFLICT (id) DO NOTHING"
             ),
             p,
