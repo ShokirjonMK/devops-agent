@@ -12,17 +12,25 @@ from sqlalchemy import engine_from_config, pool
 from app.database import Base
 from app.models import (  # noqa: F401
     AdminSetting,
+    AICreditBalance,
+    AICreditTransaction,
     AiTokenConfig,
     AlertRule,
     AuditLog,
     CredentialVault,
     Notification,
+    PaymentRecord,
+    Plan,
     PlatformAuditLog,
+    ReferralCode,
+    ReferralConversion,
     Server,
     ServerMetric,
     Task,
     TaskStep,
     User,
+    UserOnboarding,
+    UserSubscription,
 )
 
 config = context.config

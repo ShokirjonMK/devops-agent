@@ -15,6 +15,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message
 
 from handlers.admin_handler import router as admin_handler_router
+from handlers.billing import router as billing_router
 from handlers.extra_commands import router as extra_router
 from handlers.servers_wizard import router as servers_wizard_router
 from handlers.tokens_handler import router as tokens_handler_router
@@ -206,6 +207,7 @@ async def main() -> None:
         raise SystemExit("TELEGRAM_BOT_TOKEN is required")
     bot = Bot(token=TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
+    dp.include_router(billing_router)
     dp.include_router(extra_router)
     dp.include_router(servers_wizard_router)
     dp.include_router(tokens_handler_router)

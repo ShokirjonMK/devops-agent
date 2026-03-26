@@ -20,11 +20,16 @@ from app.dependencies import Role, get_encryption_service, require_role
 from app.models import (
     AdminSetting,
     AiTokenConfig,
+    AICreditBalance,
+    AICreditTransaction,
     CredentialVault,
+    PaymentRecord,
+    Plan,
     PlatformAuditLog,
     Server,
     Task,
     User,
+    UserSubscription,
 )
 from app.services.encryption_service import EncryptedBlob, EncryptionService
 from app.services.platform_audit import log_platform_audit
@@ -480,3 +485,146 @@ def admin_audit_logs(
             headers={"Content-Disposition": 'attachment; filename="audit.csv"'},
         )
     return data
+
+
+# ─── FINANCE ──────────────────────────────────────────────────────────────────
+
+@router.get("/finance/mrr")
+def admin_finance_mrr(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(Role.ADMIN)),
+) -> dict:
+    subs = db.query(UserSubscription).filter(UserSubscription.status == "active").all()
+    plans = {p.id: float(p.price_usd) for p in db.query(Plan).all()}
+    breakdown: dict[str, float] = {}
+    total = 0.0
+    for s in subs:
+        price = plans.get(s.plan_id, 0.0)
+        breakdown[s.plan_id] = breakdown.get(s.plan_id, 0.0) + price
+        total += price
+    return {"mrr_usd": round(total, 2), "arr_usd": round(total * 12, 2), "plans": breakdown}
+
+
+@router.get("/finance/stats")
+def admin_finance_stats(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(Role.ADMIN)),
+) -> dict:
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    paid_users = (
+        db.query(func.count(UserSubscription.id))
+        .filter(UserSubscription.plan_id != "free", UserSubscription.status == "active")
+        .scalar()
+        or 0
+    )
+    free_users = total_users - paid_users
+    conversion = round((paid_users / total_users * 100) if total_users > 0 else 0, 1)
+    total_revenue = db.query(func.coalesce(func.sum(PaymentRecord.amount_usd), 0)).filter(
+        PaymentRecord.status == "paid"
+    ).scalar() or 0
+    ai_spent = db.query(func.coalesce(func.sum(AICreditTransaction.amount_usd), 0)).filter(
+        AICreditTransaction.type == "spend"
+    ).scalar() or 0
+    return {
+        "total_users": total_users,
+        "paid_users": paid_users,
+        "free_users": free_users,
+        "conversion_percent": conversion,
+        "total_revenue_usd": float(total_revenue),
+        "ai_credit_spent_usd": float(abs(ai_spent)),
+    }
+
+
+@router.get("/finance/transactions")
+def admin_finance_transactions(
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(Role.ADMIN)),
+) -> list[dict]:
+    records = (
+        db.query(PaymentRecord)
+        .order_by(PaymentRecord.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": str(r.id),
+            "user_id": str(r.user_id),
+            "plan_id": r.plan_id,
+            "provider": r.provider,
+            "amount_usd": float(r.amount_usd),
+            "status": r.status,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "paid_at": r.paid_at.isoformat() if r.paid_at else None,
+        }
+        for r in records
+    ]
+
+
+@router.post("/users/{user_id}/plan")
+def admin_set_user_plan(
+    user_id: uuid.UUID,
+    body: dict,
+    db: Session = Depends(get_db),
+    me: User = Depends(require_role(Role.ADMIN)),
+) -> dict:
+    plan_id = body.get("plan_id", "free")
+    if not db.get(Plan, plan_id):
+        raise HTTPException(400, "Noto'g'ri tarif ID")
+    sub = db.query(UserSubscription).filter(UserSubscription.user_id == user_id).first()
+    if not sub:
+        sub = UserSubscription(user_id=user_id)
+        db.add(sub)
+    sub.plan_id = plan_id
+    sub.status = "active"
+    db.commit()
+    log_platform_audit(db, actor_user_id=me.id, action_type="admin_set_user_plan",
+                       resource_type="user", resource_id=str(user_id), details={"plan_id": plan_id})
+    return {"user_id": str(user_id), "plan_id": plan_id}
+
+
+@router.post("/users/{user_id}/credit")
+def admin_add_credit(
+    user_id: uuid.UUID,
+    body: dict,
+    db: Session = Depends(get_db),
+    me: User = Depends(require_role(Role.ADMIN)),
+) -> dict:
+    from app.services.credit_service import credit_service
+    amount = float(body.get("amount_usd", 0))
+    if amount <= 0:
+        raise HTTPException(400, "Summa musbat bo'lishi kerak")
+    bal = credit_service.add_bonus_credit(user_id, amount, f"Admin qo'shdi: {me.username or str(me.id)[:8]}", db)
+    return {"user_id": str(user_id), "amount_added": amount}
+
+
+@router.get("/plans")
+def admin_list_plans(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(Role.ADMIN)),
+) -> list[dict]:
+    plans = db.query(Plan).order_by(Plan.sort_order).all()
+    return [
+        {"id": p.id, "name": p.name, "price_usd": float(p.price_usd),
+         "price_uzs": p.price_uzs, "is_active": p.is_active, "limits": p.limits}
+        for p in plans
+    ]
+
+
+@router.patch("/plans/{plan_id}")
+def admin_update_plan(
+    plan_id: str,
+    body: dict,
+    db: Session = Depends(get_db),
+    me: User = Depends(require_role(Role.ADMIN)),
+) -> dict:
+    plan = db.get(Plan, plan_id)
+    if not plan:
+        raise HTTPException(404, "Tarif topilmadi")
+    allowed = {"name", "price_usd", "price_uzs", "limits", "features_list", "is_active"}
+    for k, v in body.items():
+        if k in allowed:
+            setattr(plan, k, v)
+    db.commit()
+    return {"id": plan.id, "name": plan.name, "price_usd": float(plan.price_usd)}

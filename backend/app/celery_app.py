@@ -38,9 +38,26 @@ celery_app.conf.update(
             "task": "reset_monthly_ai_usage",
             "schedule": crontab(day_of_month=1, hour=0, minute=0),
         },
+        "check-trial-expirations-daily": {
+            "task": "check_trial_expirations",
+            "schedule": crontab(hour=9, minute=0),
+        },
+        "check-quota-warnings-daily": {
+            "task": "check_quota_warnings",
+            "schedule": crontab(hour=10, minute=0),
+        },
+        "check-low-credits-daily": {
+            "task": "check_low_credits",
+            "schedule": crontab(hour=11, minute=0),
+        },
+        "process-renewals-hourly": {
+            "task": "process_subscription_renewals",
+            "schedule": crontab(minute=0),
+        },
     },
 )
 
 import app.worker_tasks  # noqa: E402, F401
 import app.beat_tasks  # noqa: E402, F401
 import app.monitoring_tasks  # noqa: E402, F401
+import app.billing_tasks  # noqa: E402, F401

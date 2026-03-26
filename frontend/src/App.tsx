@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { getStoredToken, setStoredToken } from "./api";
+import OnboardingWizard from "./components/OnboardingWizard";
+import QuotaWarningBanner from "./components/QuotaWarningBanner";
 import AdminAIProviders from "./pages/Admin/AdminAIProviders";
 import AdminAudit from "./pages/Admin/AdminAudit";
 import AdminSettings from "./pages/Admin/AdminSettings";
@@ -9,11 +11,14 @@ import AdminUsers from "./pages/AdminUsers";
 import AITokens from "./pages/AITokens";
 import AiKeys from "./pages/AiKeys";
 import Analytics from "./pages/Analytics";
+import Billing from "./pages/Billing";
 import SSHCredentials from "./pages/Credentials/SSH";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Servers from "./pages/Servers";
+import Status from "./pages/Status";
 import TaskDetail from "./pages/TaskDetail";
+import Upgrade from "./pages/Upgrade";
 
 function Nav({ onLogout }: { onLogout: () => void }) {
   const link = ({ isActive }: { isActive: boolean }) =>
@@ -46,6 +51,12 @@ function Nav({ onLogout }: { onLogout: () => void }) {
           <NavLink to="/analytics" className={link}>
             Analytics
           </NavLink>
+          <NavLink to="/billing" className={link}>
+            Billing
+          </NavLink>
+          <NavLink to="/upgrade" className={link}>
+            Yangilash
+          </NavLink>
           <NavLink to="/admin/users" className={link}>
             Admin
           </NavLink>
@@ -76,8 +87,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900">
+      <OnboardingWizard />
       <Nav onLogout={handleLogout} />
       <main className="mx-auto max-w-6xl px-4 py-8">
+        <QuotaWarningBanner />
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/servers" element={<Servers />} />
@@ -85,6 +98,9 @@ export default function App() {
           <Route path="/credentials/tokens" element={<AITokens />} />
           <Route path="/credentials/ssh" element={<SSHCredentials />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/billing" element={<Billing />} />
+          <Route path="/upgrade" element={<Upgrade />} />
+          <Route path="/status" element={<Status />} />
           <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/admin/stats" element={<AdminStats />} />
           <Route path="/admin/settings" element={<AdminSettings />} />

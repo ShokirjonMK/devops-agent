@@ -250,4 +250,45 @@ export const api = {
       base_url: string | null;
     }>
   ) => http<unknown>(`/api/ai-tokens/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+
+  // Billing
+  listPlans: () => http<unknown[]>("/api/billing/plans"),
+  getSubscription: () => http<Record<string, unknown>>("/api/billing/subscription"),
+  checkoutStripe: (planId: string) =>
+    http<{ checkout_url: string }>("/api/billing/checkout/stripe", {
+      method: "POST",
+      body: JSON.stringify({ plan_id: planId }),
+    }),
+  checkoutClick: (planId: string) =>
+    http<{ payment_url: string }>("/api/billing/checkout/click", {
+      method: "POST",
+      body: JSON.stringify({ plan_id: planId }),
+    }),
+  checkoutPayme: (planId: string) =>
+    http<{ payment_url: string }>("/api/billing/checkout/payme", {
+      method: "POST",
+      body: JSON.stringify({ plan_id: planId }),
+    }),
+  checkoutCredit: (packageId: string, provider: string) =>
+    http<{ payment_url: string; amount_usd: number; amount_uzs: number }>(
+      "/api/billing/checkout/credit",
+      { method: "POST", body: JSON.stringify({ package_id: packageId, provider }) }
+    ),
+  listCreditPackages: () => http<unknown[]>("/api/billing/credit-packages"),
+  getCredits: () => http<Record<string, unknown>>("/api/billing/credits"),
+  listInvoices: () => http<unknown[]>("/api/billing/invoices"),
+  cancelSubscription: () =>
+    http<unknown>("/api/billing/cancel", { method: "POST" }),
+  reactivateSubscription: () =>
+    http<unknown>("/api/billing/reactivate", { method: "POST" }),
+  getReferral: () => http<Record<string, unknown>>("/api/billing/referral"),
+  getOnboarding: () =>
+    http<{ step: number; completed_at: string | null; steps_data: unknown }>(
+      "/api/billing/onboarding"
+    ),
+  updateOnboarding: (step: number, stepsData?: Record<string, unknown>) =>
+    http<{ step: number; completed_at: string | null }>("/api/billing/onboarding", {
+      method: "PATCH",
+      body: JSON.stringify({ step, steps_data: stepsData }),
+    }),
 };

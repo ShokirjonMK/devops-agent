@@ -65,6 +65,37 @@ class Settings(BaseSettings):
     api_internal_secret: str = Field(default="", validation_alias=AliasChoices("API_INTERNAL_SECRET"))
     app_env: str = Field(default="development", validation_alias=AliasChoices("APP_ENV"))
 
+    # ── Stripe ────────────────────────────────────────────────────────────
+    stripe_secret_key: str = Field(default="", validation_alias=AliasChoices("STRIPE_SECRET_KEY"))
+    stripe_publishable_key: str = Field(default="", validation_alias=AliasChoices("STRIPE_PUBLISHABLE_KEY"))
+    stripe_webhook_secret: str = Field(default="", validation_alias=AliasChoices("STRIPE_WEBHOOK_SECRET"))
+    stripe_price_pro_monthly: str = Field(default="", validation_alias=AliasChoices("STRIPE_PRICE_PRO_MONTHLY"))
+    stripe_price_team_monthly: str = Field(default="", validation_alias=AliasChoices("STRIPE_PRICE_TEAM_MONTHLY"))
+
+    # ── Click (O'zbekiston) ───────────────────────────────────────────────
+    click_service_id: str = Field(default="", validation_alias=AliasChoices("CLICK_SERVICE_ID"))
+    click_merchant_id: str = Field(default="", validation_alias=AliasChoices("CLICK_MERCHANT_ID"))
+    click_secret_key: str = Field(default="", validation_alias=AliasChoices("CLICK_SECRET_KEY"))
+
+    # ── Payme ─────────────────────────────────────────────────────────────
+    payme_merchant_id: str = Field(default="", validation_alias=AliasChoices("PAYME_MERCHANT_ID"))
+    payme_secret_key: str = Field(default="", validation_alias=AliasChoices("PAYME_SECRET_KEY"))
+    payme_test_mode: bool = Field(default=True, validation_alias=AliasChoices("PAYME_TEST_MODE"))
+
+    # ── UZS narxlar ───────────────────────────────────────────────────────
+    plan_pro_price_uzs: int = Field(default=190000, validation_alias=AliasChoices("PLAN_PRO_PRICE_UZS"))
+    plan_team_price_uzs: int = Field(default=620000, validation_alias=AliasChoices("PLAN_TEAM_PRICE_UZS"))
+    credit_5_price_uzs: int = Field(default=64000, validation_alias=AliasChoices("CREDIT_5_PRICE_UZS"))
+    credit_20_price_uzs: int = Field(default=250000, validation_alias=AliasChoices("CREDIT_20_PRICE_UZS"))
+    credit_50_price_uzs: int = Field(default=620000, validation_alias=AliasChoices("CREDIT_50_PRICE_UZS"))
+
+    # ── Referral ──────────────────────────────────────────────────────────
+    referral_trial_days: int = Field(default=14, validation_alias=AliasChoices("REFERRAL_TRIAL_DAYS"))
+    referral_reward_usd: float = Field(default=5.0, validation_alias=AliasChoices("REFERRAL_REWARD_USD"))
+
+    # ── AI markup ─────────────────────────────────────────────────────────
+    ai_credit_markup_percent: float = Field(default=50.0, validation_alias=AliasChoices("AI_CREDIT_MARKUP_PERCENT"))
+
     @field_validator("database_url", mode="before")
     @classmethod
     def _strip_asyncpg(cls, v: object) -> object:

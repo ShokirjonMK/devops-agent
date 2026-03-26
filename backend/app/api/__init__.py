@@ -7,10 +7,12 @@ from app.api import (
     ai_tokens,
     analytics,
     auth_router,
+    billing,
     credentials_router,
     health_api,
     internal_bot,
     servers,
+    status_api,
     tasks,
     websocket_tasks,
 )
@@ -26,5 +28,7 @@ api_router.include_router(analytics.router)
 api_router.include_router(internal_bot.router)
 api_router.include_router(credentials_router.router)
 api_router.include_router(websocket_tasks.router)
+api_router.include_router(billing.router)
+api_router.include_router(status_api.router)
 api_router.include_router(servers.router, prefix="/servers", tags=["servers"])
 api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
