@@ -94,3 +94,4 @@ class TaskSubmit(BaseModel):
     server_id: int | None = None
     user_id: str | None = None
     source: str = Field(default="web")
+    telegram_message_id: int | None = None

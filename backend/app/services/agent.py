@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -79,7 +80,14 @@ class DevOpsAgent:
                 },
             )
 
-    def _finalize_last_step(self, task_id: int, output: str, status: str) -> None:
+    def _finalize_last_step(
+        self,
+        task_id: int,
+        output: str,
+        status: str,
+        *,
+        duration_ms: int | None = None,
+    ) -> None:
         step = (
             self.db.query(TaskStep)
             .filter(TaskStep.task_id == task_id)
@@ -90,17 +98,16 @@ class DevOpsAgent:
             step.output = (output or "")[:65000]
             step.status = status
             self.db.commit()
-            publish_task_event(
-                task_id,
-                "step_done",
-                {
-                    "step_order": step.step_order,
-                    "command": (step.command or "")[:500],
-                    "phase": step.phase,
-                    "status": status,
-                    "output_preview": (output or "")[:1200],
-                },
-            )
+            payload = {
+                "step_order": step.step_order,
+                "command": (step.command or "")[:500],
+                "phase": step.phase,
+                "status": status,
+                "output_preview": (output or "")[:1200],
+            }
+            if duration_ms is not None:
+                payload["duration_ms"] = duration_ms
+            publish_task_event(task_id, "step_done", payload)
 
     def _add_step_skipped(
         self,
@@ -265,10 +272,12 @@ class DevOpsAgent:
             return
         self._add_step_running(cmd, explanation, phase)
         try:
+            t0 = time.perf_counter()
             res = ssh.run(cmd)
+            dur_ms = int((time.perf_counter() - t0) * 1000)
             out = res.combined[:60000]
             st = StepStatus.success.value if res.exit_code == 0 else StepStatus.error.value
-            self._finalize_last_step(task_id, out, st)
+            self._finalize_last_step(task_id, out, st, duration_ms=dur_ms)
             for h in self._output_hints(out):
                 self._log(f"{cmd[:80]}: {h}", "warning")
             history.append(
@@ -281,7 +290,7 @@ class DevOpsAgent:
                 }
             )
         except Exception as ex:
-            self._finalize_last_step(task_id, str(ex), StepStatus.error.value)
+            self._finalize_last_step(task_id, str(ex), StepStatus.error.value, duration_ms=None)
             self._log(f"SSH bajarish xatosi: {cmd[:120]} — {ex}", "error")
             history.append(
                 {
@@ -384,6 +393,11 @@ class DevOpsAgent:
                 self._log("Diagnostika yakunlandi — qaror-verifikatsiya sikli.")
 
                 for iteration in range(self.settings.agent_max_iterations):
+                    publish_task_event(
+                        task.id,
+                        "agent_thinking",
+                        {"iteration": iteration + 1, "phase": "decide"},
+                    )
                     try:
                         decision = self._decide_loop(
                             task.command_text,

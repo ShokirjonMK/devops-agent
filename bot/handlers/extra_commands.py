@@ -18,8 +18,9 @@ async def cmd_settings(message: Message) -> None:
     await message.answer(
         "Sozlamalar:\n"
         f"• API: {API_URL or '(noma’lum)'}\n"
-        "• Server qo‘shish: Web UI yoki /addserver (tez orada to‘liq wizard)\n"
-        "• AI tokenlar: Web UI → AI tokens\n",
+        "• Bildirishnomalar: vazifa xabarlari tahrirlanadi (progress).\n"
+        "• AI tokenlar: Web UI (xavfsizroq) yoki /tokens havolasi.\n"
+        "• Server: Web UI yoki /addserver (API_INTERNAL_SECRET kerak).\n",
     )
 
 
@@ -29,6 +30,9 @@ async def cmd_help(message: Message) -> None:
         "Buyruqlar:\n"
         "/start — boshlash\n"
         "/help — yordam\n"
-        "/settings — API va eslatmalar\n"
-        "Matn yuborsangiz — vazifa yaratiladi (server alias yozing).\n",
+        "/settings — eslatmalar\n"
+        "/addserver — server qo‘shish (FSM)\n"
+        "/tokens — AI tokenlar (Web UI havolasi)\n"
+        "/admin — admin health (faqat ADMIN_TELEGRAM_IDS)\n"
+        "Matn yuborsangiz — vazifa (server alias yozing).\n",
     )

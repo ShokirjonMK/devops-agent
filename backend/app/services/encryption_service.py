@@ -144,6 +144,36 @@ class EncryptionService:
         )
         return self.decrypt(blob, ctx)
 
+    def to_db(self, plaintext: str, user_id: str, secret_type: str) -> dict[str, bytes]:
+        """API uchun: `encrypted_data` kaliti (ORM da `cipher_text` ga map qilinadi)."""
+        r = self.to_db_row(plaintext, user_id, secret_type)
+        return {
+            "encrypted_data": r["cipher_text"],
+            "iv": r["iv"],
+            "salt": r["salt"],
+            "tag": r["tag"],
+        }
+
+    def from_db(self, row: dict, user_id: str, secret_type: str) -> str:
+        d = dict(row)
+        if "encrypted_data" in d and d.get("cipher_text") is None:
+            d["cipher_text"] = d["encrypted_data"]
+        return self.from_db_row(d, user_id, secret_type)
+
+    def decrypt_ai_token_secret(self, row: dict, user_id: str, vault_name: str) -> str:
+        """Yangi AAD `{user}:ai_token`; eski `{user}:ai_token:{name}` bilan mos."""
+        ct = row.get("cipher_text") or row.get("encrypted_data")
+        if ct is None:
+            raise ValueError("Row missing ciphertext column")
+        blob = EncryptedBlob(ciphertext=ct, iv=row["iv"], salt=row["salt"], tag=row["tag"])
+        for ctx in (f"{user_id}:ai_token", f"{user_id}:ai_token:{vault_name}"):
+            try:
+                return self.decrypt(blob, ctx)
+            except ValueError:
+                continue
+        log.error("decryption_failed", context="ai_token_legacy")
+        raise ValueError("Decryption failed")
+
 
 def encryption_service_from_env(b64_key: str | None) -> EncryptionService | None:
     if not b64_key or not b64_key.strip():

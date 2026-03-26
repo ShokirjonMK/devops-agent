@@ -67,10 +67,6 @@ class TestResult(BaseModel):
     detail: str | None = None
 
 
-def _ctx(user_id: uuid.UUID, name: str) -> str:
-    return f"{user_id}:ai_token:{name}"
-
-
 def _secret_payload(req: TokenCreateRequest) -> str:
     return json.dumps(
         {
@@ -136,15 +132,15 @@ def create_token(
     )
     if exists:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Bu nom allaqachon bor")
-    blob = enc.encrypt(_secret_payload(payload), _ctx(user.id, payload.name))
+    row_enc = enc.to_db_row(_secret_payload(payload), str(user.id), "ai_token")
     vault = CredentialVault(
         user_id=user.id,
         name=payload.name,
         credential_type=CREDENTIAL_TYPE,
-        cipher_text=blob.ciphertext,
-        iv=blob.iv,
-        tag=blob.tag,
-        salt=blob.salt,
+        cipher_text=row_enc["cipher_text"],
+        iv=row_enc["iv"],
+        tag=row_enc["tag"],
+        salt=row_enc["salt"],
     )
     db.add(vault)
     db.flush()

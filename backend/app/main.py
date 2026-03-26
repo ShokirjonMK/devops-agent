@@ -2,12 +2,13 @@ import logging
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api import api_router
+from app.api.websocket_tasks import run_task_event_websocket
 from app.config import get_settings
 
 
@@ -45,6 +46,16 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api")
+
+
+@app.websocket("/ws/tasks/{task_id}")
+async def ws_tasks_root(
+    websocket: WebSocket,
+    task_id: int,
+    token: str | None = Query(default=None),
+) -> None:
+    """Qabul qilish tekshiruvi: `wscat -c "ws://host/ws/tasks/1?token=JWT"`."""
+    await run_task_event_websocket(websocket, task_id, token)
 
 
 @app.exception_handler(RequestValidationError)

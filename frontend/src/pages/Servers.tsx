@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Server } from "../api";
+import ServerCard from "../components/ServerCard";
 
 const empty: Omit<Server, "id" | "created_at"> = {
   name: "",
@@ -9,8 +10,11 @@ const empty: Omit<Server, "id" | "created_at"> = {
   key_path: "/ssh-keys/id_rsa",
 };
 
+type MetricsSnap = { cpu: number | null; ram: number | null; disk: number | null };
+
 export default function Servers() {
   const [list, setList] = useState<Server[]>([]);
+  const [metricsMap, setMetricsMap] = useState<Record<number, MetricsSnap | null>>({});
   const [form, setForm] = useState(empty);
   const [editing, setEditing] = useState<Server | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -18,7 +22,24 @@ export default function Servers() {
   const load = () =>
     api
       .listServers()
-      .then(setList)
+      .then(async (servers) => {
+        setList(servers);
+        const next: Record<number, MetricsSnap | null> = {};
+        await Promise.all(
+          servers.map(async (s) => {
+            try {
+              const r = await api.serverMetricsRecent(s.id, 48);
+              const p = r.points.at(-1);
+              next[s.id] = p
+                ? { cpu: p.cpu ?? null, ram: p.ram ?? null, disk: p.disk ?? null }
+                : null;
+            } catch {
+              next[s.id] = null;
+            }
+          })
+        );
+        setMetricsMap(next);
+      })
       .catch((e: Error) => setErr(e.message));
 
   useEffect(() => {
@@ -78,6 +99,14 @@ export default function Servers() {
       </div>
 
       {err && <p className="rounded-lg border border-rose-900/50 bg-rose-950/40 p-3 text-sm text-rose-300">{err}</p>}
+
+      {list.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {list.map((s) => (
+            <ServerCard key={s.id} server={s} metrics={metricsMap[s.id] ?? null} />
+          ))}
+        </div>
+      )}
 
       <form
         onSubmit={saveNew}

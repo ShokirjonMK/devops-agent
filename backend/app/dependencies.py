@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -15,6 +16,100 @@ from app.services.encryption_service import EncryptionService, build_encryption_
 from app.config import get_settings
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def _internal_secret_ok(request: Request) -> bool:
+    s = get_settings()
+    sec = (s.api_internal_secret or "").strip()
+    if not sec:
+        return False
+    return request.headers.get("X-Internal-Secret") == sec
+
+
+def _strict_internal_mode() -> bool:
+    return bool((get_settings().api_internal_secret or "").strip())
+
+
+@dataclass(frozen=True)
+class TaskAccess:
+    """Kim so‘rayapti: ichki xizmat (bot) yoki JWT foydalanuvchi."""
+
+    user: User | None
+    is_internal: bool
+    allow_anonymous: bool
+
+
+def get_task_access(
+    request: Request,
+    db: Session = Depends(get_db),
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> TaskAccess:
+    if _internal_secret_ok(request):
+        return TaskAccess(user=None, is_internal=True, allow_anonymous=False)
+    if not _strict_internal_mode():
+        if creds and creds.scheme.lower() == "bearer":
+            try:
+                uid = decode_token(creds.credentials)
+            except (ExpiredSignatureError, InvalidTokenError, ValueError):
+                return TaskAccess(user=None, is_internal=False, allow_anonymous=True)
+            u = db.get(User, uid)
+            if not u or not u.is_active:
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Foydalanuvchi topilmadi yoki nofaol")
+            return TaskAccess(user=u, is_internal=False, allow_anonymous=False)
+        return TaskAccess(user=None, is_internal=False, allow_anonymous=True)
+    if creds is None or creds.scheme.lower() != "bearer":
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Bearer yoki X-Internal-Secret kerak")
+    try:
+        uid = decode_token(creds.credentials)
+    except ExpiredSignatureError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Token muddati tugagan")
+    except (InvalidTokenError, ValueError):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Noto‘g‘ri token")
+    u = db.get(User, uid)
+    if not u or not u.is_active:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Foydalanuvchi topilmadi yoki nofaol")
+    return TaskAccess(user=u, is_internal=False, allow_anonymous=False)
+
+
+def get_task_submit_access(
+    request: Request,
+    db: Session = Depends(get_db),
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> TaskAccess:
+    if _internal_secret_ok(request):
+        return TaskAccess(user=None, is_internal=True, allow_anonymous=False)
+    if not _strict_internal_mode():
+        if creds and creds.scheme.lower() == "bearer":
+            try:
+                uid = decode_token(creds.credentials)
+            except (ExpiredSignatureError, InvalidTokenError, ValueError):
+                return TaskAccess(user=None, is_internal=False, allow_anonymous=True)
+            u = db.get(User, uid)
+            if not u or not u.is_active:
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Foydalanuvchi topilmadi yoki nofaol")
+            ur = ROLE_HIERARCHY.get((u.role or Role.VIEWER.value).lower(), 0)
+            if ur < ROLE_HIERARCHY[Role.OPERATOR.value]:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    detail="Ruxsat yetarli emas: kerak operator",
+                )
+            return TaskAccess(user=u, is_internal=False, allow_anonymous=False)
+        return TaskAccess(user=None, is_internal=False, allow_anonymous=True)
+    if creds is None or creds.scheme.lower() != "bearer":
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Bearer yoki X-Internal-Secret kerak")
+    try:
+        uid = decode_token(creds.credentials)
+    except ExpiredSignatureError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Token muddati tugagan")
+    except (InvalidTokenError, ValueError):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Noto‘g‘ri token")
+    u = db.get(User, uid)
+    if not u or not u.is_active:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Foydalanuvchi topilmadi yoki nofaol")
+    ur = ROLE_HIERARCHY.get((u.role or Role.VIEWER.value).lower(), 0)
+    if ur < ROLE_HIERARCHY[Role.OPERATOR.value]:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Ruxsat yetarli emas: kerak operator")
+    return TaskAccess(user=u, is_internal=False, allow_anonymous=False)
 
 
 def get_encryption_service() -> EncryptionService:

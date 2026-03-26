@@ -1,6 +1,6 @@
 :::writing{variant=“standard” id=“73925”}
 
-**Versiya:** 2.0.0 (2026-03-25). O‘zgarishlar: [CHANGELOG.md](CHANGELOG.md).
+**Versiya:** 2.0.1 (2026-03-26). O‘zgarishlar: [CHANGELOG.md](CHANGELOG.md).
 
 📘 TEXNIK TOPSHIRIQ (REVISED)
 

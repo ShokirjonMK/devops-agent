@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import AdminSetting, AiTokenConfig, CredentialVault
-from app.services.encryption_service import EncryptedBlob, EncryptionService
+from app.services.encryption_service import EncryptionService
 
 log = structlog.get_logger()
 
@@ -42,17 +42,21 @@ OPENAI_COMPATIBLE = frozenset(
 )
 
 
-def _vault_ctx(user_id: uuid.UUID, name: str) -> str:
-    return f"{user_id}:ai_token:{name}"
-
-
 class LLMRouter:
     def __init__(self, enc: EncryptionService) -> None:
         self._enc = enc
 
     def _decrypt_vault_row(self, user_id: uuid.UUID, vault: CredentialVault) -> dict[str, Any]:
-        blob = EncryptedBlob.from_storage(vault.cipher_text, vault.iv, vault.salt, vault.tag)
-        plain = self._enc.decrypt(blob, _vault_ctx(user_id, vault.name))
+        plain = self._enc.decrypt_ai_token_secret(
+            {
+                "cipher_text": vault.cipher_text,
+                "iv": vault.iv,
+                "salt": vault.salt,
+                "tag": vault.tag,
+            },
+            str(user_id),
+            vault.name,
+        )
         data = json.loads(plain)
         if not isinstance(data, dict):
             raise ValueError("invalid secret json")

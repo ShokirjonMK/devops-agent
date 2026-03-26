@@ -3,11 +3,21 @@ import { getStoredToken } from "../api";
 
 export type StreamState = "connecting" | "connected" | "reconnecting" | "closed";
 
+export type TaskStreamEvent = {
+  type: string;
+  raw: string;
+  data: Record<string, unknown>;
+};
+
 /**
- * Vazifa hodisalari: WebSocket + JWT (ixtiyoriy). Token bo‘lsa `?token=` qo‘shiladi.
- * Qayta ulanish: 1s, 2s, 4s … max 30s.
+ * WebSocket: `/ws/tasks/{id}?token=` — qayta ulanish 1s … 30s.
  */
-export function useTaskStream(taskId: number | null): { lines: string[]; state: StreamState } {
+export function useTaskStream(taskId: number | null): {
+  events: TaskStreamEvent[];
+  lines: string[];
+  state: StreamState;
+} {
+  const [events, setEvents] = useState<TaskStreamEvent[]>([]);
   const [lines, setLines] = useState<string[]>([]);
   const [state, setState] = useState<StreamState>("closed");
   const wsRef = useRef<WebSocket | null>(null);
@@ -20,7 +30,7 @@ export function useTaskStream(taskId: number | null): { lines: string[]; state: 
     let cancelled = false;
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const token = getStoredToken();
-    const base = `${proto}//${window.location.host}/api/ws/tasks/${taskId}/stream`;
+    const base = `${proto}//${window.location.host}/ws/tasks/${taskId}`;
     const url = token ? `${base}?token=${encodeURIComponent(token)}` : base;
 
     const clearTimer = () => {
@@ -28,6 +38,13 @@ export function useTaskStream(taskId: number | null): { lines: string[]; state: 
         window.clearTimeout(timerRef.current);
         timerRef.current = null;
       }
+    };
+
+    const pushParsed = (raw: string, data: Record<string, unknown>) => {
+      const t = String(data.type ?? "message");
+      if (t === "ping") return;
+      setEvents((prev) => [...prev.slice(-199), { type: t, raw, data }]);
+      setLines((prev) => [...prev.slice(-199), raw]);
     };
 
     const connect = () => {
@@ -41,17 +58,15 @@ export function useTaskStream(taskId: number | null): { lines: string[]; state: 
         setState("connected");
       };
       ws.onmessage = (ev: MessageEvent<string>) => {
+        const raw = ev.data;
         try {
-          const j = JSON.parse(ev.data) as { type?: string };
-          if (j.type === "ping") return;
+          const data = JSON.parse(raw) as Record<string, unknown>;
+          pushParsed(raw, data);
         } catch {
-          /* matn */
+          setLines((prev) => [...prev.slice(-199), raw]);
         }
-        setLines((prev) => [...prev, ev.data]);
       };
-      ws.onerror = () => {
-        /* proxy yoki API */
-      };
+      ws.onerror = () => {};
       ws.onclose = () => {
         wsRef.current = null;
         if (cancelled) return;
@@ -72,5 +87,5 @@ export function useTaskStream(taskId: number | null): { lines: string[]; state: 
     };
   }, [taskId]);
 
-  return { lines, state };
+  return { events, lines, state };
 }

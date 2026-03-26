@@ -19,6 +19,7 @@ from app.database import get_db
 from app.dependencies import Role, get_encryption_service, require_role
 from app.models import (
     AdminSetting,
+    AiTokenConfig,
     CredentialVault,
     PlatformAuditLog,
     Server,
@@ -78,6 +79,17 @@ def _mask_key(k: str) -> str:
     return "●●●●" + k[-4:]
 
 
+def _user_servers_used_count(db: Session, user_uuid: uuid.UUID) -> int:
+    return (
+        int(
+            db.query(func.count(func.distinct(Task.server_id)))
+            .filter(Task.owner_user_id == user_uuid, Task.server_id.isnot(None))
+            .scalar()
+            or 0
+        )
+    )
+
+
 @router.get("/users", response_model=list[UserListItem])
 def admin_list_users(
     search: str = "",
@@ -106,7 +118,12 @@ def admin_list_users(
     out: list[UserListItem] = []
     for u in rows:
         tc = db.query(func.count(Task.id)).filter(Task.owner_user_id == u.id).scalar() or 0
-        sc = 0
+        sc = (
+            db.query(func.count(func.distinct(Task.server_id)))
+            .filter(Task.owner_user_id == u.id, Task.server_id.isnot(None))
+            .scalar()
+            or 0
+        )
         out.append(
             UserListItem(
                 id=u.id,
@@ -157,7 +174,7 @@ def admin_set_role(
         is_active=u.is_active,
         last_seen_at=u.last_seen_at.isoformat() if u.last_seen_at else None,
         tasks_count=int(tc),
-        servers_count=0,
+        servers_count=_user_servers_used_count(db, u.id),
     )
 
 
@@ -192,7 +209,7 @@ def admin_set_active(
         is_active=u.is_active,
         last_seen_at=u.last_seen_at.isoformat() if u.last_seen_at else None,
         tasks_count=int(tc),
-        servers_count=0,
+        servers_count=_user_servers_used_count(db, u.id),
     )
 
 
@@ -218,13 +235,26 @@ def admin_user_stats(
         .scalar()
         or 0
     )
+    ai_sum = db.query(func.coalesce(func.sum(AiTokenConfig.usage_this_month_usd), 0)).filter(
+        AiTokenConfig.user_id == u.id
+    ).scalar()
+    try:
+        ai_float = float(ai_sum or 0)
+    except (TypeError, ValueError):
+        ai_float = 0.0
+    srv_used = (
+        db.query(func.count(func.distinct(Task.server_id)))
+        .filter(Task.owner_user_id == u.id, Task.server_id.isnot(None))
+        .scalar()
+        or 0
+    )
     return {
         "user_id": str(u.id),
         "tasks_total": int(total),
         "tasks_success": int(ok),
         "tasks_error": int(err),
-        "ai_cost_usd": 0.0,
-        "servers_count": int(db.query(func.count(Server.id)).scalar() or 0),
+        "ai_cost_usd": ai_float,
+        "servers_count": int(srv_used),
         "last_seen_at": u.last_seen_at.isoformat() if u.last_seen_at else None,
     }
 
@@ -376,13 +406,18 @@ def admin_overview(
     online = int(
         db.query(func.count(Server.id)).filter(Server.last_check_status == "online").scalar() or 0
     )
+    cost_sum = db.query(func.coalesce(func.sum(AiTokenConfig.usage_this_month_usd), 0)).scalar()
+    try:
+        cost_f = float(cost_sum or 0)
+    except (TypeError, ValueError):
+        cost_f = 0.0
     return {
         "total_users": total_users,
         "active_users_today": active_today,
         "total_tasks_today": tasks_today,
         "total_tasks_week": tasks_week,
         "success_rate_percent": rate,
-        "total_ai_cost_month_usd": 0.0,
+        "total_ai_cost_month_usd": cost_f,
         "total_servers": servers,
         "servers_online": online,
     }
@@ -392,6 +427,8 @@ def admin_overview(
 def admin_audit_logs(
     user_id: uuid.UUID | None = None,
     action: str = "",
+    from_dt: datetime | None = None,
+    to_dt: datetime | None = None,
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     export: str | None = None,
@@ -403,6 +440,10 @@ def admin_audit_logs(
         q = q.filter(PlatformAuditLog.actor_user_id == user_id)
     if action.strip():
         q = q.filter(PlatformAuditLog.action_type == action.strip())
+    if from_dt is not None:
+        q = q.filter(PlatformAuditLog.created_at >= from_dt)
+    if to_dt is not None:
+        q = q.filter(PlatformAuditLog.created_at <= to_dt)
     q = q.order_by(PlatformAuditLog.created_at.desc())
     offset = (page - 1) * limit
     rows = q.offset(offset).limit(limit).all()

@@ -11,9 +11,13 @@ import os
 import httpx
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import CommandStart
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message
 
+from handlers.admin_handler import router as admin_handler_router
 from handlers.extra_commands import router as extra_router
+from handlers.servers_wizard import router as servers_wizard_router
+from handlers.tokens_handler import router as tokens_handler_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,10 +29,18 @@ API_URL = (
     os.environ.get("API_BASE_URL") or os.environ.get("API_URL") or "http://127.0.0.1:8000"
 ).rstrip("/")
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+INTERNAL = os.environ.get("API_INTERNAL_SECRET", "").strip()
 HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "3"))
 POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL_SEC", "2"))
 POLL_MAX = int(os.environ.get("POLL_MAX_ROUNDS", "180"))
 TG_MSG_MAX = 3900
+
+
+def _api_headers() -> dict[str, str]:
+    h: dict[str, str] = {}
+    if INTERNAL:
+        h["X-Internal-Secret"] = INTERNAL
+    return h
 
 
 async def _request_with_retries(
@@ -43,9 +55,9 @@ async def _request_with_retries(
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 if method.upper() == "POST":
-                    r = await client.post(url, json=json_body)
+                    r = await client.post(url, json=json_body, headers=_api_headers())
                 else:
-                    r = await client.get(url)
+                    r = await client.get(url, headers=_api_headers())
                 r.raise_for_status()
                 return r
         except Exception as e:
@@ -56,15 +68,18 @@ async def _request_with_retries(
     raise last
 
 
-async def submit_task(command_text: str, user_id: str) -> dict:
+async def submit_task(command_text: str, user_id: str, telegram_message_id: int | None = None) -> dict:
+    body: dict = {
+        "command_text": command_text,
+        "user_id": user_id,
+        "source": "telegram",
+    }
+    if telegram_message_id is not None:
+        body["telegram_message_id"] = telegram_message_id
     r = await _request_with_retries(
         "POST",
         f"{API_URL}/api/tasks/submit",
-        json_body={
-            "command_text": command_text,
-            "user_id": user_id,
-            "source": "telegram",
-        },
+        json_body=body,
         timeout=60.0,
     )
     return r.json()
@@ -140,7 +155,7 @@ async def on_text(message: Message) -> None:
     status_msg = await message.answer("Qabul qilindi. Agent ishga tushmoqda…")
     last_step_count = -1
     try:
-        task = await submit_task(text, chat_id)
+        task = await submit_task(text, chat_id, status_msg.message_id)
         tid = int(task["id"])
         await status_msg.edit_text(
             f"Vazifa #{tid} navbatda…\nServer aniqlanishi va SSH diagnostikasi boshlanadi."
@@ -190,8 +205,11 @@ async def main() -> None:
     if not TOKEN:
         raise SystemExit("TELEGRAM_BOT_TOKEN is required")
     bot = Bot(token=TOKEN)
-    dp = Dispatcher()
+    dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(extra_router)
+    dp.include_router(servers_wizard_router)
+    dp.include_router(tokens_handler_router)
+    dp.include_router(admin_handler_router)
     dp.include_router(router)
     log.info("Aiogram polling… API_URL=%s", API_URL)
     await dp.start_polling(bot)

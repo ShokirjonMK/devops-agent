@@ -41,6 +41,12 @@ export type Server = {
   auth_type: string;
   key_path: string | null;
   created_at: string;
+  environment?: string;
+  monitoring_enabled?: boolean;
+  monitoring_interval_minutes?: number;
+  last_check_status?: string;
+  last_check_at?: string | null;
+  server_metadata?: Record<string, unknown>;
 };
 
 export type TaskStep = {
@@ -155,6 +161,7 @@ export const api = {
       total_tasks_today: number;
       total_tasks_week: number;
       success_rate_percent: number;
+      total_ai_cost_month_usd: number;
       total_servers: number;
       servers_online: number;
     }>("/api/admin/stats/overview"),
@@ -167,6 +174,68 @@ export const api = {
         role: string;
         is_active: boolean;
         tasks_count: number;
+        servers_count?: number;
       }[]
     >("/api/admin/users"),
+  adminSetUserRole: (userId: string, role: string) =>
+    http<unknown>(`/api/admin/users/${userId}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }),
+  adminSetUserActive: (userId: string, is_active: boolean) =>
+    http<unknown>(`/api/admin/users/${userId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_active }),
+    }),
+  adminSettings: () =>
+    http<{ key: string; value: unknown; description: string | null; updated_at: string | null }[]>(
+      "/api/admin/settings"
+    ),
+  adminPatchSetting: (key: string, value: unknown) =>
+    http<unknown>(`/api/admin/settings/${encodeURIComponent(key)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ value }),
+    }),
+  adminSystemAi: () => http<{ provider: string; model: string; key_hint: string }[]>("/api/admin/system-ai"),
+  adminUpsertSystemAi: (body: { provider: string; api_key: string; model: string }) =>
+    http<unknown>("/api/admin/system-ai", { method: "POST", body: JSON.stringify(body) }),
+  adminAuditLogs: (q?: string) => http<unknown[]>(`/api/admin/audit-logs${q ?? ""}`),
+  adminAuditExportCsv: () =>
+    fetch(`${base}/api/admin/audit-logs?export=csv`, { headers: authHeaders() }).then((r) => {
+      if (!r.ok) throw new Error(r.statusText);
+      return r.text();
+    }),
+
+  analyticsSummary: () =>
+    http<{
+      tasks_total_30d: number;
+      success_rate_percent: number;
+      uptime_percent: number;
+      ai_cost_month_usd: number;
+      series_tasks_by_day: { day: string; ok: number; bad: number }[];
+      ai_cost_by_provider: { name: string; value: number }[];
+      server_uptime_bars: { name: string; uptime_score: number }[];
+      activity_heatmap: { day: string; count: number }[];
+    }>("/api/analytics/summary"),
+
+  analyticsServerMetrics: (serverId: number, hours = 168) =>
+    http<{ points: { t: string | null; cpu: number | null; ram: number | null; disk: number | null }[] }>(
+      `/api/analytics/servers/${serverId}/metrics?hours=${hours}`
+    ),
+
+  serverMetricsRecent: (serverId: number, hours = 24) =>
+    http<{ points: { t: string | null; cpu: number | null; ram: number | null; disk: number | null }[] }>(
+      `/api/servers/${serverId}/metrics/recent?hours=${hours}`
+    ),
+
+  patchAiToken: (
+    id: string,
+    body: Partial<{
+      is_active: boolean;
+      is_default: boolean;
+      monthly_budget_usd: string | null;
+      model_override: string | null;
+      base_url: string | null;
+    }>
+  ) => http<unknown>(`/api/ai-tokens/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
 };

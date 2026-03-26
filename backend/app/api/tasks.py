@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.dependencies import Role, require_role
+from app.dependencies import Role, get_task_access, get_task_submit_access, require_role
 from app.models import Task, TaskSource, User
 from app.schemas import TaskCreate, TaskDetailRead, TaskRead, TaskSubmit
 from app.worker_tasks import run_agent_task
@@ -15,13 +15,22 @@ def list_tasks(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
+    access=Depends(get_task_access),
 ) -> list[Task]:
+    if not access.is_internal and not access.allow_anonymous and access.user is None:
+        raise HTTPException(status_code=401, detail="Kirish rad etildi")
     q = db.query(Task).order_by(Task.created_at.desc())
     return q.offset(skip).limit(limit).all()
 
 
 @router.get("/{task_id}", response_model=TaskDetailRead)
-def get_task(task_id: int, db: Session = Depends(get_db)) -> Task:
+def get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    access=Depends(get_task_access),
+) -> Task:
+    if not access.is_internal and not access.allow_anonymous and access.user is None:
+        raise HTTPException(status_code=401, detail="Kirish rad etildi")
     row = (
         db.query(Task)
         .options(selectinload(Task.steps), selectinload(Task.logs))
@@ -37,12 +46,13 @@ def get_task(task_id: int, db: Session = Depends(get_db)) -> Task:
 def create_task(
     payload: TaskCreate,
     db: Session = Depends(get_db),
-    _: object = Depends(require_role(Role.OPERATOR)),
+    user: User = Depends(require_role(Role.OPERATOR)),
 ) -> Task:
     task = Task(
         command_text=payload.command_text.strip(),
         server_id=payload.server_id,
         source=TaskSource.web.value,
+        owner_user_id=user.id,
     )
     db.add(task)
     db.commit()
@@ -52,11 +62,17 @@ def create_task(
 
 
 @router.post("/submit", response_model=TaskRead, status_code=status.HTTP_202_ACCEPTED)
-def submit_task_external(payload: TaskSubmit, db: Session = Depends(get_db)) -> Task:
+def submit_task_external(
+    payload: TaskSubmit,
+    db: Session = Depends(get_db),
+    access=Depends(get_task_submit_access),
+) -> Task:
+    if not access.is_internal and not access.allow_anonymous and access.user is None:
+        raise HTTPException(status_code=401, detail="Kirish rad etildi")
     src = payload.source.strip().lower()
     if src not in (TaskSource.web.value, TaskSource.telegram.value):
         src = TaskSource.web.value
-    owner_user_id = None
+    owner_user_id = access.user.id if access.user else None
     if payload.user_id is not None and str(payload.user_id).strip():
         try:
             tid = int(str(payload.user_id).strip())
@@ -72,6 +88,7 @@ def submit_task_external(payload: TaskSubmit, db: Session = Depends(get_db)) -> 
         user_id=payload.user_id,
         source=src,
         owner_user_id=owner_user_id,
+        telegram_message_id=payload.telegram_message_id,
     )
     db.add(task)
     db.commit()
