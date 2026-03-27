@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""
     # Barqaror snapshot ID — yangi alias (claude-sonnet-4-6) ba’zi hisoblarda 404 qaytarishi mumkin
-    anthropic_model: str = "claude-sonnet-4-20250514"
+    anthropic_model: str = "claude-haiku-4-5-20251001"
 
     ai_provider: str = "openai"
 

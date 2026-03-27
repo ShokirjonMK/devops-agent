@@ -79,13 +79,13 @@ def _openai_json(
     return json.loads(text)
 
 
-# Snapshot IDs first — ba’zi hisoblarda alias (masalan claude-sonnet-4-6) hali yo‘q; 404 bo‘lsa ketma-ket sinaymiz.
+# Claude 4 modellari (eski Claude 3.x deprecated bo’lgan)
 _ANTHROPIC_FALLBACK_MODELS = [
-    "claude-sonnet-4-20250514",
-    "claude-sonnet-4-5-20250929",
     "claude-haiku-4-5-20251001",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-haiku-20240307",
+    "claude-sonnet-4-5-20250929",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "claude-opus-4-6",
 ]
 
 
