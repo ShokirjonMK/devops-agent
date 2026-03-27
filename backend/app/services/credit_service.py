@@ -18,6 +18,8 @@ AI_COSTS_PER_1K_TOKENS: dict[str, float] = {
     "openai:gpt-4-turbo": 0.010,
     "anthropic:claude-opus-4-6": 0.015,
     "anthropic:claude-sonnet-4-6": 0.003,
+    "anthropic:claude-sonnet-4-20250514": 0.003,
+    "anthropic:claude-sonnet-4-5-20250929": 0.003,
     "anthropic:claude-haiku-4-5": 0.000250,
     "anthropic:claude-3-5-haiku-20241022": 0.000250,
     "google:gemini-flash": 0.000075,

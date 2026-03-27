@@ -23,7 +23,8 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
 
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-3-5-haiku-20241022"
+    # Barqaror snapshot ID — yangi alias (claude-sonnet-4-6) ba’zi hisoblarda 404 qaytarishi mumkin
+    anthropic_model: str = "claude-sonnet-4-20250514"
 
     ai_provider: str = "openai"
 
