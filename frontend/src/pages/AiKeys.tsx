@@ -27,25 +27,23 @@ const PROVIDER_INFO = {
     name: "Anthropic (Claude)",
     color: "from-orange-500/20 to-orange-500/5 border-orange-500/30",
     badge: "bg-orange-500/20 text-orange-300",
-    keyPrefix: "sk-ant-api03-",
-    keyExample: "sk-ant-api03-...",
+    keyPrefix: "sk-ant-",
+    keyExample: "sk-ant-api03-... yoki sk-ant-api04-...",
     steps: [
       {
-        text: "Claude API kaliti kerak (claude.ai obunasi alohida; API uchun alohisida to‘lov/kredit).",
+        text: "⚠️ claude.ai obunasi (Plus/Pro) API kalit bermaydi — bu alohida hisob. Ro’yxatdan o’ting yoki kiring:",
+        link: "https://platform.claude.com",
       },
       {
-        text: "Hisob sozlamalari: API kalitlar",
+        text: "Chap menyu → API Keys (yoki to’g’ridan-to’g’ri):",
         link: "https://platform.claude.com/settings/keys",
       },
       {
-        text: "Yoki workspace: Default workspace → API Keys",
+        text: "Workspace kaliti uchun (agar workspace ishlatsangiz):",
         link: "https://platform.claude.com/settings/workspaces/default/keys",
       },
-      { text: "Create Key → kalitni bir marta ko‘rsatiladi; darhol nusxalang." },
-      {
-        text: "Model: agar vazifada 404 xato bo‘lsa, «Claude Sonnet 4 (20250514)» ni tanlang (barqaror ID).",
-      },
-      { text: "Bu sahifada provayder «Anthropic», kalit va modelni saqlang." },
+      { text: "«Create Key» tugmasini bosing → nom bering → kalitni KO’CHIRIB OLING (faqat bir marta ko’rsatiladi)." },
+      { text: "Quyidagi formada: Anthropic tanlang, kalitni joylashtiring, model = «Claude Sonnet 4 (20250514)», saqlang." },
     ],
   },
   openai: {
@@ -55,11 +53,11 @@ const PROVIDER_INFO = {
     keyPrefix: "sk-",
     keyExample: "sk-proj-... yoki sk-...",
     steps: [
-      { text: "ChatGPT Plus obunasi API kalit bermaydi — Platformda alohida API kalit ochiladi." },
-      { text: "Kirish:", link: "https://platform.openai.com" },
-      { text: "API keys → Create new secret key" },
-      { text: "Kalitni nusxalang (odatda sk-... yoki sk-proj-...)" },
-      { text: "Bu sahifada OpenAI tanlang, kalitni qo‘shing; ixtiyoriy ravishda modelni tanlang." },
+      { text: "⚠️ ChatGPT Plus obunasi API kalit bermaydi — bu alohida hisob. Kiring yoki ro’yxatdan o’ting:", link: "https://platform.openai.com" },
+      { text: "Chap menyu → API keys → «Create new secret key»." },
+      { text: "Nom bering → «Create» → kalitni KO’CHIRIB OLING (faqat bir marta ko’rsatiladi)." },
+      { text: "Billing → Payment method qo’shing (API bepul emas; $5-10 kredit yetarli)." },
+      { text: "Quyidagi formada: OpenAI tanlang, kalitni joylashtiring, saqlang." },
     ],
   },
 };
